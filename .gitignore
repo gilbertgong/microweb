@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.venv/
+AI/LOCAL.md
+microweb.py.bak
+.microweb-*
