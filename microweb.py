@@ -63,6 +63,7 @@ import os
 import re
 import socket
 import tempfile
+import threading
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -214,6 +215,40 @@ class _Server(ThreadingHTTPServer):
     # in use, so only use it elsewhere (where it allows quick restarts).
     allow_reuse_address = os.name != "nt"
 
+    def __init__(self, *args, **kwargs):
+        self._requests = threading.Condition()
+        self._active = 0
+        super().__init__(*args, **kwargs)
+
+    def process_request(self, request, client_address):
+        # Count before starting the thread, including requests not yet dispatched.
+        request.settimeout(30)
+        with self._requests:
+            self._active += 1
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            with self._requests:
+                self._active -= 1
+                self._requests.notify_all()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            with self._requests:
+                self._active -= 1
+                self._requests.notify_all()
+
+    def drain_requests(self):
+        with self._requests:
+            while self._active:
+                try:
+                    self._requests.wait(0.2)
+                except KeyboardInterrupt:
+                    log.warning("Waiting for active HTTP requests before stopping components")
+
     def server_bind(self):
         if os.name == "nt":
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
@@ -289,6 +324,7 @@ class App:
         self.routes = {}  # path -> {method: handler}
         self.mounts = {}
         self.same_origin = same_origin
+        self.components = []
 
     # Routes
 
@@ -317,22 +353,62 @@ class App:
 
     # Running
 
-    def run(self, host, port, on_ready=None):
-        """Serve until Ctrl+C. on_ready() is called once the port is open."""
+    def run(self, host, port, on_ready=None, *, stop_event=None, components=None):
+        """Bind, start components, serve, drain requests, then stop in reverse order.
+
+        stop_event is an optional threading.Event for an embedding host or tests.
+        Plain App.run remains valid without any components.
+        """
+        components = list(self.components if components is None else components)
+        if len({c.id for c in components}) != len(components):
+            raise ValueError("duplicate component id")
+        if any(c._attempted for c in components):
+            raise RuntimeError("component instances support only one host run")
         try:
             server = _Server((host, port), self._handler_class())
         except OSError as err:
             if err.errno == errno.EADDRINUSE or getattr(err, "winerror", None) == 10048:
                 raise SystemExit(f"error: port {port} on {host} is already in use") from None
             raise
+        attempted, cleanup_errors = [], []
+        primary = None
         try:
+            for component in components:
+                attempted.append(component)
+                component.start()
             if on_ready:
                 on_ready()
-            server.serve_forever()
+            server.timeout = 0.2
+            while stop_event is None or not stop_event.is_set():
+                server.handle_request()
         except KeyboardInterrupt:
             pass
+        except BaseException as error:
+            primary = error
         finally:
-            server.server_close()
+            # Stop admission first; existing request threads retain their sockets.
+            try:
+                server.socket.close()
+                server.drain_requests()
+            except BaseException as error:
+                if primary is None:
+                    primary = error
+                else:
+                    log.error("HTTP drain failed during cleanup", exc_info=True)
+            for component in reversed(attempted):
+                try:
+                    component.stop()
+                except BaseException as error:
+                    cleanup_errors.append(error)
+                    log.error("Component %s failed to stop", component.id, exc_info=True)
+            try:
+                server.server_close()
+            except BaseException as error:
+                cleanup_errors.append(error)
+        if primary is not None:
+            raise primary
+        if cleanup_errors:
+            raise RuntimeError("Host cleanup failed; see component errors") from cleanup_errors[0]
 
     def handle(self, method, path, body=b"", headers=None):
         """Run a request through the app without a network connection, e.g.
@@ -463,6 +539,7 @@ class App:
                         # Headers are already sent, so all we can do is stop.
                         log.exception("%s %s failed while streaming", req.method, req.path)
                 except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                    self.close_connection = True
                     log.debug("%s %s: client disconnected", req.method, req.path)
 
             do_GET = do_HEAD = do_POST = do_PUT = do_PATCH = do_DELETE = _serve
@@ -473,7 +550,32 @@ class App:
         return Handler
 
 
-# Optional console shell -----------------------------------------------------
+# Optional components and console shell --------------------------------------
+
+class Component:
+    """An independently hostable app and its owned service lifecycle."""
+
+    def __init__(self, id, label, app, start=None, stop=None):
+        self.id, self.label, self.app = id, label, app
+        self._start, self._stop = start, stop
+        self._attempted = self._stopped = False
+
+    def start(self):
+        if self._attempted:
+            raise RuntimeError("component instances support only one host run")
+        self._attempted = True
+        if self._start:
+            self._start()
+
+    def stop(self):
+        if not self._attempted or self._stopped:
+            return
+        self._stopped = True
+        if self._stop:
+            self._stop()
+
+    def run(self, host, port, on_ready=None, *, stop_event=None):
+        return self.app.run(host, port, on_ready, stop_event=stop_event, components=[self])
 
 class Shell(App):
     """A landing page and persistent navigation around independent mounted apps.
@@ -504,6 +606,14 @@ class Shell(App):
         super().mount(prefix, app)
         self.tools[prefix.rstrip("/")] = label or prefix.strip("/")
         return app
+
+    def add(self, component, prefix):
+        """Mount an app and explicitly register its lifecycle. Construction is quiet."""
+        if any(c.id == component.id or c is component for c in self.components):
+            raise ValueError("duplicate component id")
+        self.mount(prefix, component.app, label=component.label)
+        self.components.append(component)
+        return component
 
     def _home(self, req):
         selected = req.query.get("tool")

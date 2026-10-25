@@ -35,6 +35,47 @@ Try `python examples/console.py`, or add `--standalone` to run exactly the same 
 The shell is ordinary Python in the same file; importing `App` does not create or start one.
 It does not discover packages, launch worker processes, or impose a data-sharing format.
 
+## Components and lifecycle
+
+Use a Component when an app owns background services. Construction and registration remain quiet:
+
+```python
+from microweb import App, Component, Shell
+
+tool = Component("example", "Example", App(), start=start_services, stop=stop_services)
+shell = Shell(title="Tools")
+shell.add(tool, prefix="/example")
+shell.run("127.0.0.1", 8765)
+# Alternatively: tool.run("127.0.0.1", 8765)
+```
+
+`start_services` and `stop_services` are your zero-argument functions; either callback can be omitted.
+The host binds before starting services, announces readiness afterward, and stops components in reverse order.
+Failed partial startup is cleaned up too. Shutdown drains accepted HTTP requests before component teardown;
+idle sockets have a 30-second timeout. A component's stop callback joins its owned workers. Independently
+owned jobs are untouched. Component instances support one host run; construct a new instance to run again.
+An optional `stop_event=threading.Event()` lets an embedding host request shutdown without Ctrl+C.
+
+Ordinary `App.mount()` and `App.run()` continue working without lifecycle callbacks. The
+[component contract](docs/component-contract.md) documents configuration and ownership boundaries.
+
+## Real downloader plus synthetic workbench
+
+The [combined example](examples/downloader_console.py) hosts an adapted downloader checkout and a
+small [synthetic workbench](examples/synthetic_workbench.py). It uses no models or research code.
+Create an empty directory for state, then run:
+
+```sh
+python examples/downloader_console.py --downloader-dir /path/to/librivox-download --state-dir /path/to/empty-state
+```
+
+The downloader checkout must include `librivox_web.py` with the component adapter. The example explicitly
+loads it and uses one common microweb runtime. Add `--standalone downloads` or `--standalone voices` to host
+one component at `/`. Use `--port` for an unused port. The example does not automatically collect recordings;
+the real downloader controls still perform downloads if requested. The synthetic workbench reads completed,
+present, non-rejected recordings and runs only a trivial demonstration task. Its shutdown receipt is written
+under the chosen state directory. The actual voice-making application is not integrated by this example.
+
 ## Requests and responses
 
 - Decorators: `app.get(path)`, `app.post(path)`, `app.route(path, [methods])`.
@@ -115,6 +156,3 @@ does not announce a tag that has not been published. No release or remote is con
 
 Assistant guides: [usage](AI/USAGE.md), [development context](AI/MEMORY.md), and
 [documentation strategy](AI/STRATEGY.md).
-
-Planned integration: [component, configuration and lifecycle contract](docs/component-contract.md).
-This records the agreed design direction; its Component API and lifecycle helpers are not implemented yet.

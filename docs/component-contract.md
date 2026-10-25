@@ -1,9 +1,9 @@
 # Component, configuration and lifecycle contract
 
-**Status:** design direction agreed with the user, 2026-10-25. This specifies the next implementation;
-the Component API and lifecycle orchestration below are not implemented or verified yet. Existing App,
-Shell, prefix mounting and static-file serving are already implemented. The example signatures below
-are the initial API proposal within that agreed direction, rather than commands that work today.
+**Status:** implemented foundation, 2026-10-25. Component, Component.run, Shell.add and shared lifecycle
+orchestration are implemented, with unit and loopback checks. An adapted downloader and a synthetic
+workbench demonstrate combined and standalone hosting. Integration of an actual voice workbench remains
+separate; this does not establish that an application's mock mode or private state is isolated.
 
 ## Purpose
 
@@ -91,14 +91,14 @@ and is not assumed merely because prefix mounting works.
 
 ## Hosting and mounting
 
-Standalone, using the proposed Component helper:
+Standalone, using the Component helper:
 
 ```python
 component = create_component(settings)
 component.run("127.0.0.1", 8765)
 ```
 
-Combined, using a proposed Shell.add helper:
+Combined, using Shell.add:
 
 ```python
 shell = Shell(title="Voice tools")
@@ -179,7 +179,7 @@ state.json fields, recipes, pack geometry or model settings.
 
 ## Implementation and acceptance
 
-Implement the framework contract before adapting a live workbench:
+Integration sequence (the foundation and synthetic/downloader proof are now implemented):
 
 1. Add Component and shared host lifecycle orchestration, preserving plain App/Shell use and single-file distribution.
 2. Prove standalone and combined operation with small synthetic components and isolated temporary state.

@@ -10,6 +10,9 @@ The optional Shell supplies navigation and embeds mounted apps; it does not mana
 
 - Flask-style request routing, JSON, static files, streams and custom responses.
 - Prefix mounts, mount-aware URLs, optional shell with landing page and persistent navigation.
+- Component wrapper, Shell.add, shared standalone/combined lifecycle, partial-start cleanup and active-request
+  draining before reverse shutdown. Component factories and registration do not start background services.
+- Real-downloader/synthetic-workbench example with explicit checkout/state paths and standalone modes.
 - Streaming file responses with HEAD and byte ranges; loopback-oriented threaded HTTP server.
 - Embedded partial metadata; separate release manifest on main with tagged download and checksum.
 - Explicit update checks and replacement with modification detection and backup.
@@ -19,17 +22,16 @@ The optional Shell supplies navigation and embeds mounted apps; it does not mana
 
 ## Status and next steps
 
-The user agreed the direction in [the component contract](../docs/component-contract.md) on 2026-10-25:
-quiet app construction, tool-owned startup settings, optional Component/Shell registration and explicit
-startup/shutdown ordering shared by standalone and combined hosting. This is specified, not implemented.
-The next framework work is Component and lifecycle orchestration, verified with synthetic apps before
-downstream adapters. The contract's example signatures are an initial API proposal.
+The [component contract](../docs/component-contract.md) agreed on 2026-10-25 is implemented for the framework.
+The downloader adapter and a synthetic workbench prove both combined and standalone hosting, data reading,
+media ranges and shutdown without terminating an independent process. The actual voice workbench remains
+outside integration until its own handoff. No research application or live queue was changed.
 
-Initial implementation validated with 26 offline tests on Python 3.12 and 3.14, including loopback HTTP and
-disposable-repository release tests. Browser checked landing page, framed tool and mount-aware API link.
-No downstream application has been migrated or integrated. Configure/check the GitHub origin before making
-the first release; release tooling detects OWNER/REPO or accepts it explicitly. Future downloader integration
-should preserve existing operation and media behavior. The current source remains a development version.
+The extended 37-test suite passes on Python 3.12 and 3.14, including component lifecycle, active-request drain,
+synthetic-workbench and disposable release checks. Browser checked shell navigation, mounted downloader pages and
+audio playback, and a completed synthetic task. Configure/check the GitHub origin before making
+the first release; release tooling detects OWNER/REPO or accepts it explicitly. The downloader adapter uses
+the same controller and retains standalone operation. The current source remains a development version.
 Artifact handoffs between tools remain an application-level design task.
 The initial optional shell uses an iframe. A shared page layout is a possible alternative for tighter
 navigation integration; mounting and routing do not depend on frames.
@@ -38,4 +40,4 @@ navigation integration; mounting and routing do not depend on frames.
 
 `microweb.py` is the entire vendored runtime; `examples/console.py` demonstrates both launch modes.
 `tests/` contains offline tests; `scripts/release.sh` performs local release preparation.
-`docs/component-contract.md` specifies the planned module/configuration/lifecycle boundary.
+`docs/component-contract.md` specifies the module/configuration/lifecycle boundary.

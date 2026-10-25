@@ -43,3 +43,20 @@ Initial interoperation can use a documented read-only library adapter. Component
 are proposed and unimplemented; no runtime or downstream application code was changed. Synthetic component
 checks precede application adaptation. The specification records requirements for in-flight request draining
 and mock mutation isolation, rather than assuming routing alone establishes either property.
+
+## 2026-10-25 — Component implementation and downloader proof
+
+Implemented Component, Shell.add and shared host orchestration. Binding precedes startup; readiness follows
+startup; failure cleanup includes a partially started component, with reverse stops and original exceptions
+preserved. Accepted request threads drain before teardown. Plain App/Shell use remains supported.
+Added lifecycle tests and a synthetic component that reads a download library without modifying it, drains
+its tiny work queue and writes a shutdown receipt. A launcher combines it with a real adapted downloader
+checkout or runs either component independently, using explicit isolated state and no automatic collection.
+The actual research console and live queues were not touched. Browser proof exercised mounted navigation,
+local audio playback and a synthetic task. The HTTP proof also verified that an independent test process
+survived host shutdown. Detailed local test paths are recorded only outside the shared repository.
+
+Final validation: 37 microweb tests and 114 downloader tests pass on both Python 3.12 and 3.14. JavaScript
+syntax, Python syntax, documentation links, LF text and diff whitespace checks passed. The two runtime
+copies match byte-for-byte. The isolated HTTP proof covered combined and both standalone modes, range
+responses, saved decisions, synthetic task completion and preservation of an unrelated test process.

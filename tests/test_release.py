@@ -26,7 +26,7 @@ class ReleaseTests(unittest.TestCase):
             (root / "scripts").mkdir()
             (root / "tests").mkdir()
             for relative in ["microweb.py", ".gitattributes", ".gitignore", "scripts/release.sh",
-                             "tests/test_microweb.py", "tests/test_updates.py"]:
+                             "tests/test_microweb.py", "tests/test_updates.py", "tests/test_components.py"]:
                 shutil.copy2(upstream / relative, root / relative)
             # This fixture must work even when the outer suite is checking a release.
             fixture_source = root / "microweb.py"

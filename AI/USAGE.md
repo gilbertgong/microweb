@@ -14,6 +14,12 @@ Do not replace an existing modified copy without reviewing those changes.
 Run the offline unittest discovery command in README. To inspect the console, launch the example on an unused
 loopback port; check its landing page, tool view, status link, and standalone launch. Stop only your own server.
 
+For the combined proof, use examples/downloader_console.py with an adapted downloader checkout and a fresh
+existing empty state directory, following README. Automatic collection is disabled. Check both navigation
+entries, the synthetic task, and --standalone modes; do not use production libraries for smoke tests. The
+synthetic component needs no ML dependencies. Shutdown should leave workbench/last_shutdown.json in the
+chosen state directory, with its service stopped and submitted synthetic tasks completed.
+
 ## Check / update
 
 Use the explicit CLI commands in README. Checking needs network access; it must not change files.
