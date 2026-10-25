@@ -19,11 +19,17 @@ The optional Shell supplies navigation and embeds mounted apps; it does not mana
 
 ## Status and next steps
 
+The user agreed the direction in [the component contract](../docs/component-contract.md) on 2026-10-25:
+quiet app construction, tool-owned startup settings, optional Component/Shell registration and explicit
+startup/shutdown ordering shared by standalone and combined hosting. This is specified, not implemented.
+The next framework work is Component and lifecycle orchestration, verified with synthetic apps before
+downstream adapters. The contract's example signatures are an initial API proposal.
+
 Initial implementation validated with 26 offline tests on Python 3.12 and 3.14, including loopback HTTP and
 disposable-repository release tests. Browser checked landing page, framed tool and mount-aware API link.
-No downstream migration, remote, public release or integration approved
-as part of this repository setup. Choose the GitHub repository before making the first release; release tooling
-accepts OWNER/REPO explicitly. Future downloader integration should preserve existing operation and media behavior.
+No downstream application has been migrated or integrated. Configure/check the GitHub origin before making
+the first release; release tooling detects OWNER/REPO or accepts it explicitly. Future downloader integration
+should preserve existing operation and media behavior. The current source remains a development version.
 Artifact handoffs between tools remain an application-level design task.
 The initial optional shell uses an iframe. A shared page layout is a possible alternative for tighter
 navigation integration; mounting and routing do not depend on frames.
@@ -32,3 +38,4 @@ navigation integration; mounting and routing do not depend on frames.
 
 `microweb.py` is the entire vendored runtime; `examples/console.py` demonstrates both launch modes.
 `tests/` contains offline tests; `scripts/release.sh` performs local release preparation.
+`docs/component-contract.md` specifies the planned module/configuration/lifecycle boundary.

@@ -32,3 +32,14 @@ argument overrides detection. Without a usable remote, a no-argument launch expl
 is needed and shows both remote setup and explicit invocation; no files or configuration are changed.
 Offline disposable-repository tests cover those messages, URL forms, an inferred release and an
 explicit override release. No GitHub requests are made by detection or release preparation.
+
+## 2026-10-25 — Component integration contract
+
+The user agreed on a small component/configuration/lifecycle boundary and requested a specification.
+Added docs/component-contract.md: quiet factories, optional Component wrapper, tool-owned settings,
+mount-aware apps, shared standalone/combined lifecycle, partial-start cleanup and safe shutdown ownership.
+The shell supplies navigation and hosting; tools retain state and independent workers retain their jobs.
+Initial interoperation can use a documented read-only library adapter. Component and Shell.add signatures
+are proposed and unimplemented; no runtime or downstream application code was changed. Synthetic component
+checks precede application adaptation. The specification records requirements for in-flight request draining
+and mock mutation isolation, rather than assuming routing alone establishes either property.

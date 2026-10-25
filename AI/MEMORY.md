@@ -2,6 +2,8 @@
 
 Read `PLAN.md`, `LOCAL.md` if present, `PROJECT_LOG.md` when history matters, and `STRATEGY.md`
 when changing documentation structure. For operational requests read `USAGE.md` and the README.
+For component or shell integration work, read `../docs/component-contract.md`; distinguish its planned
+Component/lifecycle API from the currently implemented App/Shell methods.
 
 ## Working preferences
 

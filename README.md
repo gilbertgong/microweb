@@ -115,3 +115,6 @@ does not announce a tag that has not been published. No release or remote is con
 
 Assistant guides: [usage](AI/USAGE.md), [development context](AI/MEMORY.md), and
 [documentation strategy](AI/STRATEGY.md).
+
+Planned integration: [component, configuration and lifecycle contract](docs/component-contract.md).
+This records the agreed design direction; its Component API and lifecycle helpers are not implemented yet.
