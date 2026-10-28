@@ -43,6 +43,9 @@ class ReleaseTests(unittest.TestCase):
             run("git", "config", "core.autocrlf", "false")
             run("git", "add", ".")
             run("git", "commit", "-m", "Initial fixture")
+            help_result = run(bash, "scripts/release.sh", "--push", "--help")
+            self.assertIn("--push", help_result.stdout)
+            self.assertIn("--repo OWNER/REPO", help_result.stdout)
             for args in [("example/microweb",), ("--repo",), ("--unknown",)]:
                 invalid_args = run(bash, "scripts/release.sh", *args, check=False)
                 self.assertEqual(invalid_args.returncode, 2)

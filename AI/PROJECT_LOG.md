@@ -201,3 +201,21 @@ All 56 tests pass under actual MSYS2/UCRT64 Python 3.14 and Python 3.12/Git Bash
 verify a single additional release commit includes staged source and new files, partial/untracked changes
 are rejected, failed tests preserve staging/HEAD, and unchanged versions provide bump guidance.
 No actual release or push was performed while implementing this workflow.
+
+
+## 2026-10-27 — Optional GitHub publishing and user-focused README
+
+The user requested --push as an explicit publication option. Default release/validation runs remain
+local. With --push, check gh availability/authentication, prepare or validate the local release and tests,
+require clean main, and push main plus the selected tag atomically without force. Git push destination
+matches the selected GitHub repository, using a matching origin push URL or that repo's HTTPS URL.
+Create a GitHub release with generated notes and only microweb.py attached; the manifest stays in Git.
+Download the attachment and verify its checksum. Existing releases are reused; missing runtime assets
+are uploaded, matching assets verified, and differing assets refused without clobber. Existing drafts
+require explicit publication. Failures retain local release state for a --push retry.
+All 65 tests pass on Python 3.12/Git Bash and UCRT64 Python 3.14/MSYS2 with site packages disabled.
+Publishing commands are mocked: creation, existing/missing/different assets, target selection, failed
+push, dirty/wrong-branch rejection, drafts and API errors. No live remote write was performed.
+The user clarified that README is for framework users. Removed the development/release section and
+internal launcher implementation notes; preserved operational details in AI/USAGE.md. Recorded the
+lasting documentation preference in AI/MEMORY.md and aligned AI/PLAN.md.

@@ -84,7 +84,7 @@ console.run("127.0.0.1", 8765)
 The shell supplies a Components overview, navigation and default styling. The overview has one row per
 registered panel or banner: linked name, ID, optional description, placement and mount path. Panel names
 open in the shell; banner names open the mounted app directly. This is a registration list, not a health
-dashboard. There is no separate Open column. Navigation identifies the current page for assistive technology.
+dashboard. Navigation identifies the current page for assistive technology.
 Tools appear in a same-origin
 iframe so their pages remain independent. Direct visits to `/example/` serve the tool alone.
 An empty shell displays a useful starting page explaining that no tools are registered.
@@ -138,8 +138,7 @@ using one common microweb runtime. It keeps its session, downloads and workbench
 `data/downloader-console/` in this repository,
 created after socket binding and reused on later runs. Use `--state-dir /another/directory` only to override
 that location; an explicit relative path is relative to your working directory. The resolved path is printed
-at startup. No manual directory creation is required. This example always mounts both components; argument
-parsing is separate from the short composition code in `main()`. Use `--port` for an unused port. It does not automatically collect recordings;
+at startup. No manual directory creation is required. This example always mounts both components. Use `--port` for an unused port. It does not automatically collect recordings;
 the real downloader controls still perform downloads if requested. The synthetic workbench reads completed,
 present, non-rejected recordings and runs only a trivial demonstration task. Its shutdown receipt is written
 under the chosen state directory. The actual voice-making application is not integrated by this example.
@@ -165,8 +164,7 @@ python microweb.py --update
 
 Imports and normal application startup never contact the network. Released copies embed a version
 and the raw GitHub URL of `microweb.version` on `main`. That separate manifest announces the latest
-release, its tagged download URL and SHA-256. It is created by the release script; an unreleased
-development copy has no configured update URL.
+release, its tagged download URL and SHA-256.
 
 Updates verify the installed file against its old tagged manifest, refuse local modifications,
 verify downloaded bytes and syntax, save `microweb.py.bak`, and replace only `microweb.py`.
@@ -175,55 +173,4 @@ after replacement. Update copies in each consuming repository deliberately and t
 Checksums detect mismatched bytes; trust still comes from the repository and HTTPS.
 The updater does not update applications using this framework.
 
-## Development and releases
-
-```text
-python -B -m unittest discover -s tests -q
-bash scripts/release.sh
-```
-
-The release script needs Bash, Git and Python. Creating a new release also requires a configured Git
-author, an existing commit and branch `main`. Stage all intended changes first; unstaged tracked changes
-and non-ignored untracked files are rejected. Set `PYTHON` to choose an interpreter. On Windows use Git Bash
-or MSYS2 with Git and Python on PATH.
-
-The GitHub repository is detected from `origin` (HTTPS, `git@github.com:OWNER/REPO.git`, or
-`ssh://git@github.com/OWNER/REPO.git`). It supplies the location for the release manifest and
-download URLs; detection makes no network requests. To override it, or if no remote is configured,
-use `bash scripts/release.sh --repo OWNER/REPO`. With no arguments and no usable origin, the script explains
-these options and exits without changing files or configuring a remote.
-
-Set `__version__` in `microweb.py` to the intended release (for example `v0.1.0`), then stage that change
-along with everything intended for the release. No preparatory commit is needed. Development suffixes
-are refused. The version must be newer than the previous manifest when creating a new release.
-
-```bash
-git add <files-for-this-release>
-bash scripts/release.sh
-```
-
-The script reads that embedded version, sets the manifest URL, hashes the final LF Python file, writes
-`microweb.version`, runs tests, then creates one release commit containing all staged changes and its
-generated updates, plus an annotated tag. The source version,
-manifest version and tag are the same literal string, including `v`; the script adds or removes no prefix.
-It never pushes. If tests fail it restores the source and manifest and leaves your staged work intact.
-A later Git failure leaves
-prepared work available for inspection; inspect `git status` and tags before retrying.
-Progress messages describe preparation, tests, commit/tag creation and final validation.
-If the version's tag already exists, the script validates it without changing release files, commits or
-tags. It checks the annotated tag and its ancestry, matching working/tagged source and
-manifest bytes, LF, embedded update URL, manifest version/download URL and SHA-256. Later documentation or
-tooling commits are allowed; changed release artifacts fail validation. Validation is local and makes no
-network requests, so it does not confirm publication on GitHub.
-It also explains that creating a new release requires bumping `__version__` in `microweb.py` and staging
-the change. If source changes still use an existing version, validation fails rather than replacing its tag.
-Successful tests are cached under ignored `tests/.release-cache/`, keyed by source SHA-256 and release
-commit, current test/script/example inputs and Python interpreter. A matching pass skips tests while
-integrity validation still runs every time. Missing, invalid or mismatched records run tests normally;
-failures are never cached. New releases always run tests before committing. Delete the cache directory
-to force a fresh run.
-The script prints the command to publish the branch and tag together, so the manifest on `main`
-does not announce a tag that has not been published. No release or remote is configured initially.
-
-Assistant guides: [usage](AI/USAGE.md), [development context](AI/MEMORY.md), and
-[documentation strategy](AI/STRATEGY.md).
+For AI-assisted use, see [usage](AI/USAGE.md) and [assistant instructions](AI/MEMORY.md).

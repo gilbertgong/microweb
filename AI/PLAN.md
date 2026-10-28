@@ -30,6 +30,9 @@ The optional Shell supplies navigation and embeds mounted apps; it does not mana
 - Embedded partial metadata; separate release manifest on main with tagged download and checksum.
 - Explicit update checks and replacement with modification detection and backup.
 - Bash release workflow that tests, commits and tags locally; runnable standalone/combined example.
+  Optional --push checks gh authentication, atomically pushes main/tag, creates a GitHub release with
+  only microweb.py attached and verifies its checksum. Existing release/attachment retries supported;
+  differing attachments fail without overwrite. Default operation remains local and offline.
   Verbose progress and final local integrity validation; existing tags validate without changing release artifacts.
   Test passes cached under ignored tests/.release-cache/ by source hash, release commit, inputs and interpreter.
   One release commit includes staged changes/version bump and generated metadata; no preparatory commit.
@@ -44,15 +47,17 @@ The downloader adapter and a synthetic workbench prove both combined and standal
 media ranges and shutdown without terminating an independent process. The actual voice workbench remains
 outside integration until its own handoff. No research application or live queue was changed.
 
-The extended 56-test suite passes on Python 3.12 and 3.14 with site packages disabled, covering a portable
-copied demo, discovery, descriptions/overview, placement/order, lifecycle, active-request drain,
-synthetic-workbench and disposable release checks. Browser checked shell navigation, mounted downloader pages and
+All 65 tests pass on Python 3.12/Git Bash and Python 3.14/MSYS2 with site packages disabled. Coverage
+includes a portable copied demo, discovery, descriptions/overview, placement/order, lifecycle, active-request drain,
+synthetic-workbench, disposable releases and mocked publishing/retry/checksum checks. No live publishing
+was performed to test --push. README focuses on users; testing and release instructions live in AI/USAGE.md.
+Browser checked shell navigation, mounted downloader pages and
 audio playback, and a completed synthetic task. A further isolated discovery browser check verified two panels
 from one checkout plus a shared banner, also above the downloader and its Review page. The GitHub origin is
 configured. Each release's source, manifest and tag use the same literal prefixed version string;
 a staged bump prepares the next release without manually updating the manifest.
 Release tooling prepares a local commit, checksum manifest and
-annotated tag; publishing requires a separate explicit push request. The downloader adapter uses the same
+annotated tag; publishing requires explicit --push and user authorization. The downloader adapter uses the same
 controller and retains standalone operation.
 Artifact handoffs between tools remain an application-level design task.
 The initial optional shell uses an iframe. A shared page layout is a possible alternative for tighter

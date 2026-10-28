@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Usage: bash scripts/release.sh [--repo OWNER/REPO]
-# Creates or validates a LOCAL release commit and annotated tag. Never pushes.
+# Usage: bash scripts/release.sh [--repo OWNER/REPO] [--push]
+# Creates or validates a local release. Publishes only with explicit --push.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export PYTHONDONTWRITEBYTECODE=1
@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -100,14 +101,68 @@ def validate_release():
     report(f"Release commit: {release_commit()}")
     report(f"SHA-256: {expected['sha256']}")
 
-parser = argparse.ArgumentParser(description="Create or validate a local microweb release. Never pushes.")
+def github_repository(remote):
+    match = re.fullmatch(r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)",
+                         remote.rstrip("/"))
+    return match.group(1).removesuffix(".git") if match else None
+
+def gh(*args):
+    result = subprocess.run(["gh", *args], capture_output=True)
+    if result.returncode:
+        sys.exit("GitHub CLI failed; local release remains available. Retry --push after resolving:\n" +
+                 result.stderr.decode("utf-8", errors="replace"))
+    return result
+
+def remote_release():
+    result = subprocess.run(["gh", "api", f"repos/{repository}/releases/tags/{tag}"],
+                            capture_output=True)
+    if result.returncode:
+        if b"HTTP 404" in result.stderr:
+            return None
+        sys.exit("Cannot inspect GitHub release: " + result.stderr.decode("utf-8", errors="replace"))
+    return json.loads(result.stdout)
+
+def publish_release():
+    if git("branch", "--show-current") != "main" or git("status", "--porcelain"):
+        sys.exit("Publishing requires a clean main. Commit pending changes before retrying --push.")
+    # Use the matching origin push URL (e.g. SSH). An explicit --repo override must
+    # never send the Git push to a different repository via origin or a pushurl.
+    origin = subprocess.run(["git", "remote", "get-url", "--push", "origin"], text=True, capture_output=True)
+    url = origin.stdout.strip()
+    target = url if (github_repository(url) or "").lower() == repository.lower() else f"https://github.com/{repository}.git"
+    report(f"Pushing main and {tag} together to {target} ...")
+    subprocess.run(["git", "push", "--atomic", target,
+                    "refs/heads/main:refs/heads/main", f"refs/tags/{tag}:refs/tags/{tag}"], check=True)
+    existing = remote_release()
+    if existing is None:
+        report(f"Creating GitHub release {tag} with microweb.py ...")
+        gh("release", "create", tag, "microweb.py", "--repo", repository,
+           "--verify-tag", "--title", tag, "--generate-notes")
+        existing = remote_release()
+        if existing is None:
+            sys.exit("GitHub release was not found after creation; retry --push to inspect/resume.")
+    if existing.get("draft"):
+        sys.exit("The existing GitHub release is a draft; publish it explicitly before retrying --push.")
+    if not any(asset["name"] == "microweb.py" for asset in existing["assets"]):
+        report("Attaching missing microweb.py to the existing GitHub release ...")
+        gh("release", "upload", tag, "microweb.py", "--repo", repository)
+    report("Verifying the uploaded microweb.py checksum ...")
+    uploaded = gh("release", "download", tag, "--repo", repository,
+                  "--pattern", "microweb.py", "--output", "-").stdout
+    if hashlib.sha256(uploaded).digest() != hashlib.sha256(source.read_bytes()).digest():
+        sys.exit("Uploaded microweb.py differs from the validated release; refusing to replace it.")
+    report(f"Published and verified: {existing['html_url']}")
+
+parser = argparse.ArgumentParser(description="Create or validate a local microweb release; --push publishes to GitHub.")
 parser.add_argument("--repo", metavar="OWNER/REPO", help="GitHub repository (defaults to origin)")
-repository = parser.parse_args().repo
+parser.add_argument("--push", action="store_true", help="push main and tag, then publish a GitHub release with microweb.py")
+options = parser.parse_args()
+repository = options.repo
 if repository is None:
     origin = subprocess.run(["git", "remote", "get-url", "origin"], text=True, capture_output=True)
     remote = origin.stdout.strip().rstrip("/") if origin.returncode == 0 else ""
-    match = re.fullmatch(r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)", remote)
-    if not match:
+    repository = github_repository(remote)
+    if repository is None:
         sys.exit(
             "Cannot detect a GitHub OWNER/REPO from origin (missing or unsupported remote).\n"
             "This identifies the GitHub repository used for the release manifest and download URLs.\n"
@@ -116,10 +171,14 @@ if repository is None:
             "Or supply it explicitly: bash scripts/release.sh --repo OWNER/REPO\n"
             "No remote or files have been changed."
         )
-    repository = match.group(1).removesuffix(".git")
 if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
     sys.exit("Repository must be OWNER/REPO")
 print(f"Release repository: {repository}", flush=True)
+if options.push:
+    if shutil.which("gh") is None:
+        sys.exit("--push requires GitHub CLI (gh). Install it and run gh auth login first.")
+    report("Checking GitHub CLI authentication ...")
+    gh("auth", "status", "--hostname", "github.com")
 source = Path("microweb.py")
 original = source.read_bytes()
 text = original.decode("utf-8")
@@ -140,7 +199,10 @@ if git("tag", "--list", tag):
     report("To generate a new release, bump __version__ in microweb.py and stage your changes first.")
     validate_release()
     cached_tests()
-    report(f"Validated {tag} locally. No network requests or pushes performed.")
+    if options.push:
+        publish_release()
+    else:
+        report(f"Validated {tag} locally. No network requests or pushes performed.")
     sys.exit(0)
 report("Checking prerequisites for a new release ...")
 if subprocess.run(["git", "diff", "--quiet", "--"]).returncode != 0:
@@ -190,5 +252,8 @@ subprocess.run(["git", "tag", "-a", tag, "-m", f"microweb {version}"], check=Tru
 validate_release()
 save_test_pass(*test_cache())
 print(f"Created {tag} locally. SHA-256: {manifest['sha256']}")
-print(f"Review, then publish together: git push --atomic origin main refs/tags/{tag}")
+if options.push:
+    publish_release()
+else:
+    report(f"To publish main, tag and microweb.py: bash scripts/release.sh --repo {repository} --push")
 PY

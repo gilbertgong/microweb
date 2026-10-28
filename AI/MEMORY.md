@@ -9,6 +9,9 @@ linked names, including banners. Descriptions are optional display metadata. App
 
 ## Working preferences
 
+- Keep README aimed at users of the framework: usage, API, examples and updates. Put repository
+  maintenance, testing and release/publishing workflows in AI/ rather than README.
+  *Why:* the user explicitly wants the README to explain consuming the project, not maintaining it.
 - Lead with the Flask-style, single-file web server: copy microweb.py, write an App, run it.
   Keep console/shell composition a secondary optional feature in introductions, examples and documentation.
   *Why:* the console is useful but should not obscure the framework's primary purpose or suggest extra setup.
@@ -38,3 +41,6 @@ linked names, including banners. Descriptions are optional display metadata. App
   *Why:* published hashes must match vendored bytes across operating systems.
 - Do not publish, push, or create a real release without a user request. Test releases in disposable repos.
   *Why:* a version announcement is a deliberate publishing decision.
+- Keep release.sh local by default. Explicit --push publishes main and the selected tag plus a GitHub
+  release with only microweb.py attached; the manifest belongs in Git, not the release assets.
+  *Why:* the user wants optional end-to-end publishing without changing the default local workflow.

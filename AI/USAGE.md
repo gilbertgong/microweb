@@ -12,7 +12,7 @@ Do not replace an existing modified copy without reviewing those changes.
 
 ## Smoke test
 
-Run the offline unittest discovery command in README. To inspect the console, launch the example on an unused
+Run `python -B -m unittest discover -s tests -q` from the repository root. To inspect the console, launch the example on an unused
 loopback port; check its landing page, tool view, status link, and standalone launch. Stop only your own server.
 The optional console demo is `python examples/console.py`: all views are bundled. No cloning, package installation,
 configuration or data directories are prerequisites. Check Library, Workbench's demo task button, and the
@@ -49,20 +49,47 @@ Development copies cannot self-update until released. Never silently force past 
 
 Only when requested: inspect main and configured Git identity, choose the actual OWNER/REPO,
 set a new `__version__` such as `v0.1.0` in microweb.py, then stage all intended release files.
+Requirements: Bash, Git, Python, an existing commit, branch main and configured Git author/committer.
+Set PYTHON to select the interpreter. Windows supports Git Bash and MSYS2. Use canonical
+vMAJOR.MINOR.PATCH with no development suffix, newer than the previous manifest for a new release.
 Run `bash scripts/release.sh` without a preparatory commit. It rejects unstaged tracked changes and
 non-ignored untracked files. Its one release commit includes all staged work and generated updates.
 Failed tests restore source/manifest bytes and preserve the user's staged work.
 It detects the GitHub repository from origin; `--repo OWNER/REPO` overrides detection.
+Supported origin forms are GitHub HTTPS, git@github.com:OWNER/REPO.git and ssh://git@github.com/OWNER/REPO.git.
 Without a usable origin or explicit argument it explains how to configure either, and changes nothing.
-It reads the version from the source and creates a local commit and tag without pushing.
+It reads the version from the source and creates a local commit and tag; default runs never push.
 Preserve the source string exactly in the manifest and tag, including its `v` prefix.
+The script sets the embedded manifest URL, hashes final UTF-8/LF source, and writes microweb.version
+automatically; do not manually synchronize the manifest. A Git failure after preparation leaves files
+or a local release commit available for inspection; inspect status and tags before retrying.
 Verify the manifest SHA-256 matches tagged microweb.py bytes. Publishing is a separate user decision.
 Rerunning the script for an existing tag performs local validation without changing release artifacts. Read its
 step-by-step report; a mismatch is a failure to investigate, not permission to replace the tag. It allows
 later tooling/docs commits but requires source and manifest to match the tagged release exactly.
+Validation checks tag annotation/ancestry, working/tagged source and manifest bytes, LF, embedded update
+URL, manifest version/download URL and SHA-256. Local validation does not confirm remote publication.
 An existing tag also prints guidance to bump __version__ in microweb.py and stage it for a new release;
 never replace an existing tag to publish changed source under the same version.
 Successful test runs are cached in ignored tests/.release-cache/ against the source SHA-256, release
 commit, test/script/example inputs and interpreter. Matching passes skip tests; integrity validation
 always runs. Missing/invalid/mismatched cache entries run tests normally. Failures are not cached.
 Remove that directory for a fresh run. New releases always run tests before committing.
+
+## Publish a release
+
+Only when the user explicitly requests publishing/pushing: use `bash scripts/release.sh --push`, optionally
+with `--repo OWNER/REPO`. Installing/configuring gh is separate setup; verify Git authentication and
+`gh auth login` before publishing. The script checks gh authentication before preparing a new release.
+It completes the same staged local release workflow (or validates an existing one), then requires clean
+main, pushes main and the selected tag atomically without force, and creates a GitHub release with
+generated notes. The only uploaded asset is microweb.py; microweb.version stays in Git only.
+It downloads that asset to verify its checksum. Origin's push URL is used only if it matches the selected
+GitHub repo; an override otherwise uses that repo's HTTPS URL. Do not silently publish to another repo.
+
+Retry --push after a partial failure: local release history is retained, existing published releases
+are reused, missing microweb.py is uploaded, and matching assets are only verified. Different existing
+asset bytes fail without replacement. An existing draft must be explicitly published before retrying.
+Do not bump again just to recover a publishing failure. No --push means no gh/network/publishing calls.
+Verify publishing code with mocked commands and disposable repositories; never test against a real
+remote without the user's explicit authorization to publish that release.
