@@ -70,7 +70,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 __version__ = "0.1.0"
-UPDATE_URL = ""  # Set by scripts/release.sh to the raw manifest on main.
+UPDATE_URL = "https://raw.githubusercontent.com/gilbertgong/microweb/main/microweb.version"
 
 # Copyright (c) 2026, Gilbert Gong
 # Redistribution and use in source and binary forms, with or without
