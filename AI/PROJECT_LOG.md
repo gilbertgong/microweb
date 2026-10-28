@@ -140,3 +140,13 @@ framework and the separate self-contained console demo is unchanged.
 User requested a release through scripts/release.sh. Normalized the source version from v0.1.0 to 0.1.0;
 the release script adds the v prefix to the annotated tag. Origin identifies gilbertgong/microweb. The script
 generates the update URL and SHA-256 manifest, runs the tests, and commits/tags locally. No push is authorized.
+
+
+## 2026-10-27 — Preserve the literal prefixed release version
+
+The user chose v0.1.0 as the actual source version. Source, manifest and annotated tag now share the
+same literal string; release.sh neither adds nor removes a prefix. The updater uses that exact string
+for tagged manifest lookup and parses its numeric portion only for comparisons. Tests cover exact release
+metadata and canonical version validation. All 56 tests pass on Python 3.12 and 3.14.
+The prior first-release tag was local only (checked against origin) and is regenerated through the script;
+the earlier release commits remain in history. Nothing is pushed.

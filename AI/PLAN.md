@@ -40,12 +40,13 @@ The downloader adapter and a synthetic workbench prove both combined and standal
 media ranges and shutdown without terminating an independent process. The actual voice workbench remains
 outside integration until its own handoff. No research application or live queue was changed.
 
-The extended 55-test suite passes on Python 3.12 and 3.14 with site packages disabled, covering a portable
+The extended 56-test suite passes on Python 3.12 and 3.14 with site packages disabled, covering a portable
 copied demo, discovery, descriptions/overview, placement/order, lifecycle, active-request drain,
 synthetic-workbench and disposable release checks. Browser checked shell navigation, mounted downloader pages and
 audio playback, and a completed synthetic task. A further isolated discovery browser check verified two panels
 from one checkout plus a shared banner, also above the downloader and its Review page. The GitHub origin is
-configured and the source version is 0.1.0. Release tooling prepares a local commit, checksum manifest and
+configured and the source version is v0.1.0. Source, manifest and tag use the same literal prefixed string.
+Release tooling prepares a local commit, checksum manifest and
 annotated tag; publishing requires a separate explicit push request. The downloader adapter uses the same
 controller and retains standalone operation.
 Artifact handoffs between tools remain an application-level design task.

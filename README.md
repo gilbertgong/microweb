@@ -192,12 +192,13 @@ download URLs; detection makes no network requests. To override it, or if no rem
 use `bash scripts/release.sh OWNER/REPO`. With no arguments and no usable origin, the script explains
 these options and exits without changing files or configuring a remote.
 
-Set `__version__` in `microweb.py` to the intended numeric release (for example `0.1.0`) and commit
+Set `__version__` in `microweb.py` to the intended release (for example `v0.1.0`) and commit
 that change before running the script. Development suffixes are refused. The version must be newer
 than the previous manifest, and its tag must not already exist.
 
 The script reads that embedded version, sets the manifest URL, hashes the final LF Python file, writes
-`microweb.version`, runs tests, then creates a release commit and annotated `vVERSION` tag.
+`microweb.version`, runs tests, then creates a release commit and annotated tag. The source version,
+manifest version and tag are the same literal string, including `v`; the script adds or removes no prefix.
 It never pushes. If tests fail it restores the source and manifest. A later Git failure leaves
 prepared work available for inspection; inspect `git status` and tags before retrying.
 The script prints the command to publish the branch and tag together, so the manifest on `main`

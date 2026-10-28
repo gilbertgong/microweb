@@ -48,8 +48,9 @@ Development copies cannot self-update until released. Never silently force past 
 ## Prepare a release
 
 Only when requested: inspect a clean committed main and configured Git identity, choose the actual OWNER/REPO,
-set and commit a new numeric `__version__` in microweb.py, then run `bash scripts/release.sh`.
+set and commit a new `__version__` such as `v0.1.0` in microweb.py, then run `bash scripts/release.sh`.
 It detects the GitHub repository from origin; an optional OWNER/REPO argument overrides detection.
 Without a usable origin or explicit argument it explains how to configure either, and changes nothing.
 It reads the version from the source and creates a local commit and tag without pushing.
+Preserve the source string exactly in the manifest and tag, including its `v` prefix.
 Verify the manifest SHA-256 matches tagged microweb.py bytes. Publishing is a separate user decision.

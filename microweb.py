@@ -69,7 +69,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-__version__ = "0.1.0"
+__version__ = "v0.1.0"
 UPDATE_URL = "https://raw.githubusercontent.com/gilbertgong/microweb/main/microweb.version"
 
 # Copyright (c) 2026, Gilbert Gong
@@ -689,9 +689,9 @@ class Shell(App):
 # Explicit version checks and vendored-file updates --------------------------
 
 def _version_parts(version):
-    if not re.fullmatch(r"\d+\.\d+\.\d+", version):
-        raise ValueError("release versions must be MAJOR.MINOR.PATCH")
-    return tuple(int(part) for part in version.split("."))
+    if not re.fullmatch(r"v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)", version):
+        raise ValueError("release versions must be vMAJOR.MINOR.PATCH")
+    return tuple(int(part) for part in version[1:].split("."))
 
 
 def _download(url):
@@ -730,7 +730,7 @@ def install_update(manifest, target=None):
     target = Path(target or __file__).resolve()
     if "/main/" not in UPDATE_URL:
         raise ValueError("expected a raw GitHub manifest on main")
-    old_url = UPDATE_URL.replace("/main/", f"/refs/tags/v{__version__}/", 1)
+    old_url = UPDATE_URL.replace("/main/", f"/refs/tags/{__version__}/", 1)
     old_manifest = json.loads(_download(old_url))
     original = target.read_bytes()
     if hashlib.sha256(original).hexdigest() != old_manifest["sha256"]:

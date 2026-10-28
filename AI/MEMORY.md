@@ -28,6 +28,9 @@ linked names, including banners. Descriptions are optional display metadata. App
   *Why:* consumers control when tested framework copies change.
 - Read release versions from `microweb.py`'s `__version__`, not a separate command-line argument.
   *Why:* the source file is the single place to set the intended version.
+- Use the literal prefixed release version everywhere, for example v0.1.0 in source, manifest and tag.
+  The release script must not add or remove the prefix; numerical comparison is internal only.
+  *Why:* the user prefers one consistent version string rather than different source and tag forms.
 - Use UTF-8 and LF for text. Run meaningful offline tests for routing, files, updates and release behavior.
   *Why:* published hashes must match vendored bytes across operating systems.
 - Do not publish, push, or create a real release without a user request. Test releases in disposable repos.

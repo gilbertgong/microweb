@@ -9,16 +9,22 @@ import microweb
 
 
 class UpdateTests(unittest.TestCase):
+    def test_release_version_format(self):
+        self.assertEqual(microweb._version_parts("v0.1.0"), (0, 1, 0))
+        for version in ["0.1.0", "vv0.1.0", "v01.1.0", "v0.1.0.dev1"]:
+            with self.subTest(version=version), self.assertRaises(ValueError):
+                microweb._version_parts(version)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.target = Path(self.temp.name) / "microweb.py"
-        self.original = b'__version__ = "1.0.0"\n'
-        self.incoming = b'__version__ = "1.1.0"\n'
+        self.original = b'__version__ = "v1.0.0"\n'
+        self.incoming = b'__version__ = "v1.1.0"\n'
         self.target.write_bytes(self.original)
-        self.old = {"version": "1.0.0", "sha256": hashlib.sha256(self.original).hexdigest()}
-        self.latest = {"version": "1.1.0", "url": "https://example.test/v1.1.0/microweb.py",
+        self.old = {"version": "v1.0.0", "sha256": hashlib.sha256(self.original).hexdigest()}
+        self.latest = {"version": "v1.1.0", "url": "https://example.test/v1.1.0/microweb.py",
                        "sha256": hashlib.sha256(self.incoming).hexdigest()}
-        self.version_patch = patch.object(microweb, "__version__", "1.0.0")
+        self.version_patch = patch.object(microweb, "__version__", "v1.0.0")
         self.url_patch = patch.object(microweb, "UPDATE_URL", "https://raw.githubusercontent.com/example/microweb/main/microweb.version")
         self.version_patch.start()
         self.url_patch.start()
@@ -58,7 +64,7 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(self.target.read_bytes(), self.original)
 
     def test_version_mismatch_and_syntax(self):
-        for data in [b'__version__ = "9.0.0"\n', b"invalid python !!!"]:
+        for data in [b'__version__ = "v9.0.0"\n', b"invalid python !!!"]:
             self.latest["sha256"] = hashlib.sha256(data).hexdigest()
             with self.assertRaises((ValueError, SyntaxError)):
                 self.install(data)
@@ -72,7 +78,7 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(backup.read_bytes(), b"previous backup")
 
     def test_same_or_older_no_download(self):
-        for version in ["1.0.0", "0.9.0"]:
+        for version in ["v1.0.0", "v0.9.0"]:
             with patch.object(microweb, "_download") as download:
                 self.assertFalse(microweb.install_update({"version": version}, self.target))
                 download.assert_not_called()

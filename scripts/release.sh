@@ -47,8 +47,8 @@ versions = [node.value.value for node in ast.parse(text).body
 if len(versions) != 1 or not isinstance(versions[0], str):
     sys.exit("microweb.py must define one literal __version__ string")
 version = versions[0]
-if not re.fullmatch(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)", version):
-    sys.exit("Set __version__ in microweb.py to MAJOR.MINOR.PATCH, without a v prefix or development suffix")
+if not re.fullmatch(r"v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)", version):
+    sys.exit("Set __version__ in microweb.py to vMAJOR.MINOR.PATCH, without a development suffix")
 if git("status", "--porcelain"):
     sys.exit("Commit or stash working-tree changes before creating a release")
 git("rev-parse", "--verify", "HEAD")
@@ -56,14 +56,14 @@ if git("branch", "--show-current") != "main":
     sys.exit("Create releases on main; its manifest announces the latest release")
 git("var", "GIT_AUTHOR_IDENT")
 git("var", "GIT_COMMITTER_IDENT")
-tag = "v" + version
+tag = version
 if git("tag", "--list", tag):
     sys.exit(f"Tag already exists: {tag}")
 manifest_path = Path("microweb.version")
 old_manifest = manifest_path.read_bytes() if manifest_path.exists() else None
 if old_manifest is not None:
     previous = json.loads(old_manifest)["version"]
-    if tuple(map(int, version.split("."))) <= tuple(map(int, previous.split("."))):
+    if tuple(map(int, version[1:].split("."))) <= tuple(map(int, previous[1:].split("."))):
         sys.exit("__version__ must be newer than the previous release manifest")
 raw = f"https://raw.githubusercontent.com/{repository}"
 text, count = re.subn(r'^UPDATE_URL = .*$', f'UPDATE_URL = "{raw}/main/microweb.version"', text, count=1, flags=re.M)

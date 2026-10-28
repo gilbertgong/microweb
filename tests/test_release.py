@@ -31,7 +31,7 @@ class ReleaseTests(unittest.TestCase):
             # This fixture must work even when the outer suite is checking a release.
             fixture_source = root / "microweb.py"
             fixture_source.write_bytes(re.sub(
-                rb'^__version__ = .*$', b'__version__ = "1.0.0"',
+                rb'^__version__ = .*$', b'__version__ = "v1.0.0"',
                 fixture_source.read_bytes(), count=1, flags=re.M))
             # Do not copy this test: the release script runs the copied suite.
             env = dict(os.environ, PYTHON=sys.executable.replace("\\", "/"),
@@ -56,9 +56,12 @@ class ReleaseTests(unittest.TestCase):
             result = run(bash, "scripts/release.sh", check=False)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             manifest = json.loads((root / "microweb.version").read_bytes())
+            self.assertEqual(manifest["version"], "v1.0.0")
+            self.assertEqual(manifest["url"], "https://raw.githubusercontent.com/example/microweb/refs/tags/v1.0.0/microweb.py")
+            self.assertEqual(run("git", "tag", "--list").stdout.strip(), "v1.0.0")
             tagged = subprocess.check_output(["git", "show", "v1.0.0:microweb.py"], cwd=root, env=env)
             self.assertEqual(manifest["sha256"], hashlib.sha256(tagged).hexdigest())
-            self.assertIn(b'__version__ = "1.0.0"', tagged)
+            self.assertIn(b'__version__ = "v1.0.0"', tagged)
             self.assertIn(b'/main/microweb.version"', tagged)
             self.assertEqual(run("git", "status", "--porcelain").stdout, "")
             self.assertEqual(run("git", "cat-file", "-t", "v1.0.0").stdout.strip(), "tag")
@@ -71,14 +74,14 @@ class ReleaseTests(unittest.TestCase):
                 self.assertIn("Tag already exists: v1.0.0", duplicate.stderr)
             # An explicit argument overrides an unsupported origin.
             run("git", "remote", "set-url", "origin", "https://example.invalid/other/repo.git")
-            fixture_source.write_bytes(fixture_source.read_bytes().replace(b'__version__ = "1.0.0"', b'__version__ = "1.0.1"'))
+            fixture_source.write_bytes(fixture_source.read_bytes().replace(b'__version__ = "v1.0.0"', b'__version__ = "v1.0.1"'))
             run("git", "add", "microweb.py")
             run("git", "commit", "-m", "Set next fixture version")
             override = run(bash, "scripts/release.sh", "example/microweb", check=False)
             self.assertEqual(override.returncode, 0, override.stdout + override.stderr)
-            self.assertEqual(json.loads((root / "microweb.version").read_bytes())["version"], "1.0.1")
+            self.assertEqual(json.loads((root / "microweb.version").read_bytes())["version"], "v1.0.1")
             # Failed tests restore the pre-release source and manifest.
-            fixture_source.write_bytes(fixture_source.read_bytes().replace(b'__version__ = "1.0.1"', b'__version__ = "1.1.0"'))
+            fixture_source.write_bytes(fixture_source.read_bytes().replace(b'__version__ = "v1.0.1"', b'__version__ = "v1.1.0"'))
             source_before = fixture_source.read_bytes()
             manifest_before = (root / "microweb.version").read_bytes()
             (root / "tests/test_failure.py").write_text(
