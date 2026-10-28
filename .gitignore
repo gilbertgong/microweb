@@ -8,3 +8,4 @@ microweb.py.bak
 !/components/.gitkeep
 /data/
 /console.local.json
+/tests/.release-cache/

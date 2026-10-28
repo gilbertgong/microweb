@@ -49,8 +49,15 @@ Development copies cannot self-update until released. Never silently force past 
 
 Only when requested: inspect a clean committed main and configured Git identity, choose the actual OWNER/REPO,
 set and commit a new `__version__` such as `v0.1.0` in microweb.py, then run `bash scripts/release.sh`.
-It detects the GitHub repository from origin; an optional OWNER/REPO argument overrides detection.
+It detects the GitHub repository from origin; `--repo OWNER/REPO` overrides detection.
 Without a usable origin or explicit argument it explains how to configure either, and changes nothing.
 It reads the version from the source and creates a local commit and tag without pushing.
 Preserve the source string exactly in the manifest and tag, including its `v` prefix.
 Verify the manifest SHA-256 matches tagged microweb.py bytes. Publishing is a separate user decision.
+Rerunning the script for an existing tag performs local validation without changing release artifacts. Read its
+step-by-step report; a mismatch is a failure to investigate, not permission to replace the tag. It allows
+later tooling/docs commits but requires source and manifest to match the tagged release exactly.
+Successful test runs are cached in ignored tests/.release-cache/ against the source SHA-256, release
+commit, test/script/example inputs and interpreter. Matching passes skip tests; integrity validation
+always runs. Missing/invalid/mismatched cache entries run tests normally. Failures are not cached.
+Remove that directory for a fresh run. New releases always run tests before committing.

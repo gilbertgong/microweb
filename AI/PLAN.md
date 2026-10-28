@@ -30,8 +30,10 @@ The optional Shell supplies navigation and embeds mounted apps; it does not mana
 - Embedded partial metadata; separate release manifest on main with tagged download and checksum.
 - Explicit update checks and replacement with modification detection and backup.
 - Bash release workflow that tests, commits and tags locally; runnable standalone/combined example.
+  Verbose progress and final local integrity validation; existing tags validate without changing release artifacts.
+  Test passes cached under ignored tests/.release-cache/ by source hash, release commit, inputs and interpreter.
   The version comes directly from committed `__version__`; GitHub OWNER/REPO is detected from origin
-  or supplied as an optional argument. Missing remote setup gets an explanatory message without changes.
+  or supplied with --repo OWNER/REPO. Missing remote setup gets an explanatory message without changes.
 
 ## Status and next steps
 

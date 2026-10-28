@@ -150,3 +150,28 @@ for tagged manifest lookup and parses its numeric portion only for comparisons. 
 metadata and canonical version validation. All 56 tests pass on Python 3.12 and 3.14.
 The prior first-release tag was local only (checked against origin) and is regenerated through the script;
 the earlier release commits remain in history. Nothing is pushed.
+
+
+## 2026-10-27 — Verbose release progress and repeatable validation
+
+At the user's request, release.sh now reports prerequisites, preparation, tests, commit/tag creation
+and integrity checks. New releases receive final validation. An existing version tag selects read-only
+validation plus tests instead of an error. Validation checks annotation, ancestry, working/tagged source
+and manifest bytes, LF, update/download URLs, version and SHA-256. It allows later tooling/docs changes;
+new releases still require clean main and Git identity. No network access or pushes are performed.
+All 56 tests pass on Python 3.12/3.14, including repeat runs without ref/file changes, later documentation
+commits, and rejection of changed release artifacts or a mismatched repository. Ran the updated script
+against the actual local v0.1.0 release: all checks and tests passed; release artifacts and tag unchanged.
+
+
+## 2026-10-27 — Explicit repository option and cached test passes
+
+Repository override is now --repo OWNER/REPO; positional input is rejected and origin detection remains
+the default. Successful release tests are saved atomically under ignored tests/.release-cache/. Records
+include source SHA-256, release commit, Python interpreter and a hash of current test/script/example inputs.
+Existing releases always undergo integrity validation, then reuse only a matching successful record.
+Absent, malformed or mismatched records run tests normally; failed tests do not write a pass. New releases
+always test before committing and save the pass after final validation. Cache write failures are warnings.
+All 56 tests pass on Python 3.12/3.14. Disposable-repo checks cover argument errors, cache hits, missing/
+corrupt records, invalidation by new tests and uncached failures. Two actual v0.1.0 validations confirmed
+first-run cache population and second-run reuse. Release artifacts/tag remain unchanged; nothing pushed.
