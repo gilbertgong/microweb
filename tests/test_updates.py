@@ -1,4 +1,5 @@
 import hashlib
+import io
 import json
 import tempfile
 import unittest
@@ -21,7 +22,6 @@ class UpdateTests(unittest.TestCase):
         self.original = b'__version__ = "v1.0.0"\n'
         self.incoming = b'__version__ = "v1.1.0"\n'
         self.target.write_bytes(self.original)
-        self.old = {"version": "v1.0.0", "sha256": hashlib.sha256(self.original).hexdigest()}
         self.latest = {"version": "v1.1.0", "url": "https://example.test/v1.1.0/microweb.py",
                        "sha256": hashlib.sha256(self.incoming).hexdigest()}
         self.version_patch = patch.object(microweb, "__version__", "v1.0.0")
@@ -35,8 +35,7 @@ class UpdateTests(unittest.TestCase):
         self.temp.cleanup()
 
     def install(self, incoming=None):
-        responses = [json.dumps(self.old).encode(), self.incoming if incoming is None else incoming]
-        with patch.object(microweb, "_download", side_effect=responses) as download:
+        with patch.object(microweb, "_download", return_value=self.incoming if incoming is None else incoming) as download:
             result = microweb.install_update(self.latest, self.target)
         return result, download
 
@@ -45,18 +44,37 @@ class UpdateTests(unittest.TestCase):
             self.assertEqual(microweb.check_update(), self.latest)
         self.assertEqual(self.target.read_bytes(), self.original)
 
-    def test_update_backup_and_old_tag(self):
+    def test_update_backup_without_old_manifest_lookup(self):
         result, download = self.install()
         self.assertTrue(result)
         self.assertEqual(self.target.read_bytes(), self.incoming)
         self.assertEqual(self.target.with_suffix(".py.bak").read_bytes(), self.original)
-        self.assertIn("/refs/tags/v1.0.0/", download.call_args_list[0].args[0])
+        download.assert_called_once_with(self.latest["url"])
 
-    def test_modified_copy_refused(self):
+    def test_modified_copy_updated_and_preserved(self):
+        modified = self.original + b"# local changes\n"
+        self.target.write_bytes(modified)
+        result, download = self.install()
+        self.assertTrue(result)
+        self.assertEqual(self.target.read_bytes(), self.incoming)
+        self.assertEqual(self.target.with_suffix(".py.bak").read_bytes(), modified)
+        download.assert_called_once_with(self.latest["url"])
+
+    def test_same_version_modified_copy_can_be_restored(self):
         self.target.write_bytes(self.original + b"# local changes\n")
-        with self.assertRaisesRegex(ValueError, "modifications"):
-            self.install()
-        self.assertFalse(self.target.with_suffix(".py.bak").exists())
+        self.latest.update(version="v1.0.0", sha256=hashlib.sha256(self.original).hexdigest())
+        result, _ = self.install(self.original)
+        self.assertTrue(result)
+        self.assertEqual(self.target.read_bytes(), self.original)
+        self.assertEqual(self.target.with_suffix(".py.bak").read_bytes(), self.original + b"# local changes\n")
+
+    def test_cli_update_attempts_same_version_refresh(self):
+        same = {**self.latest, "version": "v1.0.0"}
+        with patch("sys.argv", ["microweb.py", "--update"]), patch("sys.stdout", new_callable=io.StringIO), \
+                patch.object(microweb, "check_update", return_value=same), \
+                patch.object(microweb, "install_update", return_value=True) as install:
+            microweb.main()
+        install.assert_called_once_with(same)
 
     def test_bad_checksum_refused(self):
         with self.assertRaisesRegex(ValueError, "SHA-256"):
@@ -80,7 +98,8 @@ class UpdateTests(unittest.TestCase):
     def test_same_or_older_no_download(self):
         for version in ["v1.0.0", "v0.9.0"]:
             with patch.object(microweb, "_download") as download:
-                self.assertFalse(microweb.install_update({"version": version}, self.target))
+                self.assertFalse(microweb.install_update({"version": version,
+                    "sha256": hashlib.sha256(self.original).hexdigest()}, self.target))
                 download.assert_not_called()
 
     def test_replace_failure_leaves_backup_and_original(self):

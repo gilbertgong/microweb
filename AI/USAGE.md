@@ -43,7 +43,11 @@ banner. Check tab order and the banner on landing and both panel pages; its disp
 
 Use the explicit CLI commands in README. Checking needs network access; it must not change files.
 Updating is an explicit operation: expect a backup and run the consuming application's checks after replacement.
-Development copies cannot self-update until released. Never silently force past local modifications.
+Copies need a configured manifest URL and a valid vMAJOR.MINOR.PATCH version. Explicit --update replaces
+local edits after preserving the current bytes in microweb.py.bak; no installed-file checksum gate or
+old-manifest lookup is required. Downloaded checksum/version/syntax are still validated. An existing
+backup is never overwritten. Same-version modified files can be restored; matching files are left alone,
+and newer installed versions are not downgraded. --check-update stays read-only.
 
 ## Prepare a release
 

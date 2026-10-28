@@ -29,6 +29,9 @@ linked names, including banners. Descriptions are optional display metadata. App
   *Why:* this is a reusable foundation, with downstream applications maintained independently.
 - Check versions and update only on explicit CLI actions. Never automatically update on import or startup.
   *Why:* consumers control when tested framework copies change.
+- Treat explicit --update as permission to replace local edits, preserving the exact previous file as .bak.
+  Validate downloaded checksum/version/syntax; do not require the installed file to match an old release.
+  *Why:* the user wants a convenient updater that can upgrade an edited copy, with recovery via the backup.
 - Read release versions from `microweb.py`'s `__version__`, not a separate command-line argument.
   *Why:* the source file is the single place to set the intended version.
 - Release directly from staged changes, including manual version bumps, in one commit with generated metadata.

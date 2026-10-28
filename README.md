@@ -166,8 +166,10 @@ Imports and normal application startup never contact the network. Released copie
 and the raw GitHub URL of `microweb.version` on `main`. That separate manifest announces the latest
 release, its tagged download URL and SHA-256.
 
-Updates verify the installed file against its old tagged manifest, refuse local modifications,
-verify downloaded bytes and syntax, save `microweb.py.bak`, and replace only `microweb.py`.
+`--update` explicitly replaces the file, including local edits. It verifies the downloaded checksum,
+version and Python syntax, saves the current bytes as `microweb.py.bak`, and replaces only `microweb.py`.
+It can restore a modified copy of the same release too; already matching files need no change, and
+newer installed versions are not downgraded. No old-release checksum lookup is needed.
 An existing backup must be moved or removed before another update. Restart running applications
 after replacement. Update copies in each consuming repository deliberately and test their apps.
 Checksums detect mismatched bytes; trust still comes from the repository and HTTPS.

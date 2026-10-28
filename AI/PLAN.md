@@ -28,7 +28,9 @@ The optional Shell supplies navigation and embeds mounted apps; it does not mana
   banners top to bottom across repos. examples/demo_components supplies two synthetic panels and one banner.
 - Streaming file responses with HEAD and byte ranges; loopback-oriented threaded HTTP server.
 - Embedded partial metadata; separate release manifest on main with tagged download and checksum.
-- Explicit update checks and replacement with modification detection and backup.
+- Explicit update checks and replacement of edited copies with exact-byte backup. Incoming bytes are
+  checksum/version/syntax validated; no old-manifest lookup or installed-file checksum gate.
+  Same-version modified copies can be restored, matching files skipped, and downgrades refused.
 - Bash release workflow that tests, commits and tags locally; runnable standalone/combined example.
   Optional --push checks gh authentication, atomically pushes main/tag, creates a GitHub release with
   only microweb.py attached and verifies its checksum. Existing release/attachment retries supported;
@@ -47,7 +49,7 @@ The downloader adapter and a synthetic workbench prove both combined and standal
 media ranges and shutdown without terminating an independent process. The actual voice workbench remains
 outside integration until its own handoff. No research application or live queue was changed.
 
-All 65 tests pass on Python 3.12/Git Bash and Python 3.14/MSYS2 with site packages disabled. Coverage
+All 67 tests pass on Python 3.12/Git Bash and Python 3.14/MSYS2 with site packages disabled. Coverage
 includes a portable copied demo, discovery, descriptions/overview, placement/order, lifecycle, active-request drain,
 synthetic-workbench, disposable releases and mocked publishing/retry/checksum checks. No live publishing
 was performed to test --push. README focuses on users; testing and release instructions live in AI/USAGE.md.

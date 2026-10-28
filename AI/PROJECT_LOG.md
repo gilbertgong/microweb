@@ -219,3 +219,17 @@ push, dirty/wrong-branch rejection, drafts and API errors. No live remote write 
 The user clarified that README is for framework users. Removed the development/release section and
 internal launcher implementation notes; preserved operational details in AI/USAGE.md. Recorded the
 lasting documentation preference in AI/MEMORY.md and aligned AI/PLAN.md.
+
+
+## 2026-10-27 — Convenient explicit updates of edited copies
+
+The user found installed-file checksum refusal contrary to the updater's convenience goal. --update
+now treats the explicit request as permission to replace local edits, preserving exact prior bytes in
+microweb.py.bak. It no longer downloads an old manifest or requires matching installed bytes. Incoming
+SHA-256, literal version and syntax checks, exclusive backup creation, same-directory staged replacement
+and detection of concurrent changes remain. Existing backups are not overwritten. Same-version edited
+copies can be restored; already matching copies are skipped and newer installed versions are not downgraded.
+--check-update remains read-only. Updated the user README, assistant usage and lasting preference.
+All 67 tests pass on Python 3.12/Git Bash and Python 3.14/MSYS2, including edited-copy backups,
+same-version refresh and CLI dispatch. No real file was upgraded as part of verification. The runtime
+change is not yet released; existing published versions still contain their previous updater behavior.

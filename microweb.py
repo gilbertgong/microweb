@@ -69,7 +69,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-__version__ = "v0.1.2"
+__version__ = "v0.1.3"
 UPDATE_URL = "https://raw.githubusercontent.com/gilbertgong/microweb/main/microweb.version"
 
 # Copyright (c) 2026, Gilbert Gong
@@ -719,22 +719,20 @@ def check_update():
 
 
 def install_update(manifest, target=None):
-    """Replace an unmodified release copy, retaining a .bak. Restart apps to use it.
+    """Install the requested release, backing up current bytes including local edits.
 
-    The old tagged manifest establishes the expected local bytes. A modified or
-    development copy is never silently overwritten. No downloaded code is run.
+    Verify incoming bytes before replacing anything. No downloaded code is run.
     """
     current = _version_parts(__version__)
-    if _version_parts(manifest["version"]) <= current:
+    if _version_parts(manifest["version"]) < current:
         return False
     target = Path(target or __file__).resolve()
-    if "/main/" not in UPDATE_URL:
-        raise ValueError("expected a raw GitHub manifest on main")
-    old_url = UPDATE_URL.replace("/main/", f"/refs/tags/{__version__}/", 1)
-    old_manifest = json.loads(_download(old_url))
     original = target.read_bytes()
-    if hashlib.sha256(original).hexdigest() != old_manifest["sha256"]:
-        raise ValueError("local file has modifications; update manually")
+    if hashlib.sha256(original).hexdigest() == manifest["sha256"]:
+        return False
+    backup = target.with_name(target.name + ".bak")
+    if backup.exists():
+        raise ValueError(f"backup already exists: {backup}; keep or remove it before updating")
     incoming = _download(manifest["url"])
     if hashlib.sha256(incoming).hexdigest() != manifest["sha256"]:
         raise ValueError("downloaded file does not match release SHA-256")
@@ -745,9 +743,6 @@ def install_update(manifest, target=None):
     if versions != [manifest["version"]]:
         raise ValueError("downloaded file version does not match manifest")
     compile(incoming, str(target), "exec")
-    backup = target.with_name(target.name + ".bak")
-    if backup.exists():
-        raise ValueError(f"backup already exists: {backup}; keep or remove it before updating")
     staged = None
     try:
         with tempfile.NamedTemporaryFile(dir=target.parent, prefix=".microweb-", delete=False) as output:
@@ -779,9 +774,11 @@ def main():
         remote = check_update()
         newer = _version_parts(remote["version"]) > _version_parts(__version__)
         print(f'Installed: {__version__}; latest release: {remote["version"]}')
-        if args.update and newer:
-            install_update(remote)
-            print("Updated. Previous file saved as microweb.py.bak; restart applications to use the new version.")
+        if args.update:
+            if install_update(remote):
+                print("Updated. Previous file (including local edits) saved as microweb.py.bak; restart applications to use the new version.")
+            else:
+                print("No update needed; already matches the latest release or has a newer version.")
         elif newer:
             print("An update is available. Run with --update to install it.")
         else:
