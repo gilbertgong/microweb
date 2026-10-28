@@ -69,7 +69,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-__version__ = "v0.1.0"
+__version__ = "0.1.0"
 UPDATE_URL = ""  # Set by scripts/release.sh to the raw manifest on main.
 
 # Copyright (c) 2026, Gilbert Gong

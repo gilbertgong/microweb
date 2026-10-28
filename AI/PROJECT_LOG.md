@@ -134,3 +134,9 @@ At the user's request, removed standalone branching from downloader_console.py a
 main now constructs the two apps and explicitly mounts /downloads and /voices before running the shell.
 The optional state override/default and deferred storage preparation remain. Standalone support in the
 framework and the separate self-contained console demo is unchanged.
+
+## 2026-10-27 — Prepare first release, 0.1.0
+
+User requested a release through scripts/release.sh. Normalized the source version from v0.1.0 to 0.1.0;
+the release script adds the v prefix to the annotated tag. Origin identifies gilbertgong/microweb. The script
+generates the update URL and SHA-256 manifest, runs the tests, and commits/tags locally. No push is authorized.

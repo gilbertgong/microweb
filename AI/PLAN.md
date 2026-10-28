@@ -44,9 +44,10 @@ The extended 55-test suite passes on Python 3.12 and 3.14 with site packages dis
 copied demo, discovery, descriptions/overview, placement/order, lifecycle, active-request drain,
 synthetic-workbench and disposable release checks. Browser checked shell navigation, mounted downloader pages and
 audio playback, and a completed synthetic task. A further isolated discovery browser check verified two panels
-from one checkout plus a shared banner, also above the downloader and its Review page. Configure/check the GitHub origin before making
-the first release; release tooling detects OWNER/REPO or accepts it explicitly. The downloader adapter uses
-the same controller and retains standalone operation. The current source remains a development version.
+from one checkout plus a shared banner, also above the downloader and its Review page. The GitHub origin is
+configured and the source version is 0.1.0. Release tooling prepares a local commit, checksum manifest and
+annotated tag; publishing requires a separate explicit push request. The downloader adapter uses the same
+controller and retains standalone operation.
 Artifact handoffs between tools remain an application-level design task.
 The initial optional shell uses an iframe. A shared page layout is a possible alternative for tighter
 navigation integration; mounting and routing do not depend on frames.
