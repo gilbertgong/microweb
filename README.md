@@ -1,13 +1,19 @@
 # microweb
 
-A small Flask-style framework for local Python web apps, with an optional console shell.
-Standard library only; copy **`microweb.py`** into your project. Python 3.10 or newer.
+A Flask-style web server in a single Python file. Copy **`microweb.py`** beside your app and run it.
+Standard library only, with no packages to install. Python 3.10 or newer.
 BSD 2-Clause licensed, including the notice embedded in the file.
+
+Save this as `app.py` beside `microweb.py`:
 
 ```python
 from microweb import App
 
 app = App()
+
+@app.get("/")
+def home(req):
+    return "Hello from microweb"
 
 @app.get("/api/hello")
 def hello(req):
@@ -16,65 +22,14 @@ def hello(req):
 app.run("127.0.0.1", 8765)
 ```
 
-## Optional console
-
-```python
-from microweb import Shell
-
-console = Shell(title="My tools")
-console.mount("/example", app, label="Example")
-console.run("127.0.0.1", 8765)
-```
-
-The shell supplies a landing page, navigation and default styling. Tools appear in a same-origin
-iframe so their pages remain independent. Direct visits to `/example/` serve the tool alone.
-An empty shell displays a useful starting page explaining that no tools are registered.
-`App.mount()` also works without a shell, including nested mounts.
-
-Try `python examples/console.py`, or add `--standalone` to run exactly the same tool independently.
-The shell is ordinary Python in the same file; importing `App` does not create or start one.
-It does not discover packages, launch worker processes, or impose a data-sharing format.
-
-## Components and lifecycle
-
-Use a Component when an app owns background services. Construction and registration remain quiet:
-
-```python
-from microweb import App, Component, Shell
-
-tool = Component("example", "Example", App(), start=start_services, stop=stop_services)
-shell = Shell(title="Tools")
-shell.add(tool, prefix="/example")
-shell.run("127.0.0.1", 8765)
-# Alternatively: tool.run("127.0.0.1", 8765)
-```
-
-`start_services` and `stop_services` are your zero-argument functions; either callback can be omitted.
-The host binds before starting services, announces readiness afterward, and stops components in reverse order.
-Failed partial startup is cleaned up too. Shutdown drains accepted HTTP requests before component teardown;
-idle sockets have a 30-second timeout. A component's stop callback joins its owned workers. Independently
-owned jobs are untouched. Component instances support one host run; construct a new instance to run again.
-An optional `stop_event=threading.Event()` lets an embedding host request shutdown without Ctrl+C.
-
-Ordinary `App.mount()` and `App.run()` continue working without lifecycle callbacks. The
-[component contract](docs/component-contract.md) documents configuration and ownership boundaries.
-
-## Real downloader plus synthetic workbench
-
-The [combined example](examples/downloader_console.py) hosts an adapted downloader checkout and a
-small [synthetic workbench](examples/synthetic_workbench.py). It uses no models or research code.
-Create an empty directory for state, then run:
+Run it:
 
 ```sh
-python examples/downloader_console.py --downloader-dir /path/to/librivox-download --state-dir /path/to/empty-state
+python app.py
 ```
 
-The downloader checkout must include `librivox_web.py` with the component adapter. The example explicitly
-loads it and uses one common microweb runtime. Add `--standalone downloads` or `--standalone voices` to host
-one component at `/`. Use `--port` for an unused port. The example does not automatically collect recordings;
-the real downloader controls still perform downloads if requested. The synthetic workbench reads completed,
-present, non-rejected recordings and runs only a trivial demonstration task. Its shutdown receipt is written
-under the chosen state directory. The actual voice-making application is not integrated by this example.
+Open `http://127.0.0.1:8765/` for the page or `/api/hello` for JSON. Add routes, serve static files,
+or stream responses as your application needs them. The optional console shell is described below.
 
 ## Requests and responses
 
@@ -102,6 +57,100 @@ Bodies require Content-Length and default to a 1 MB limit; `req.body(max_bytes=.
 Origin-bearing mutation requests must match the HTTP Host by default; `same_origin=False`
 disables that check. This local HTTP server has no authentication, TLS, proxy handling, or public
 deployment support. Bind to loopback for the intended desktop use.
+
+## Optional console
+
+For several apps sharing navigation, an optional shell is included in the same file.
+
+Try the complete bundled console from the repository root:
+
+```sh
+python examples/console.py
+```
+
+Open `http://127.0.0.1:8765/`. It has two synthetic panels (Library and Workbench) and a CPU/memory banner,
+all included here. No package installation, other repositories, configuration files or hardware tools are
+needed. Workbench's button records a demo result in memory; all metrics/history are fabricated, with no GPU
+monitoring or `nvidia-smi`. Use `--port` if the default is occupied.
+
+```python
+from microweb import Shell
+
+console = Shell(title="My tools")
+console.mount("/example", app, label="Example", description="Browse and manage local examples.")
+console.run("127.0.0.1", 8765)
+```
+
+The shell supplies a Components overview, navigation and default styling. The overview has one row per
+registered panel or banner: linked name, ID, optional description, placement and mount path. Panel names
+open in the shell; banner names open the mounted app directly. This is a registration list, not a health
+dashboard. There is no separate Open column. Navigation identifies the current page for assistive technology.
+Tools appear in a same-origin
+iframe so their pages remain independent. Direct visits to `/example/` serve the tool alone.
+An empty shell displays a useful starting page explaining that no tools are registered.
+`App.mount()` also works without a shell, including nested mounts.
+`description` is optional on `Shell.mount()` and `Shell.add()`; it is plain display text and adds no
+requirements to Component factories. See [shell conventions](docs/shell-conventions.md) for shared vocabulary,
+banner layouts and the boundary between framework and application UI.
+
+Try `python examples/console.py`, or add `--standalone library`, `--standalone workbench`, or
+`--standalone machine` to run one of the same apps independently. Bare `--standalone` selects Library.
+The shell is ordinary Python in the same file; importing `App` does not create or start one.
+It does not discover packages, launch worker processes, or impose a data-sharing format.
+
+### Components and lifecycle
+
+Use a Component when an app owns background services. Construction and registration remain quiet:
+
+```python
+from microweb import App, Component, Shell
+
+tool = Component("example", "Example", App(), start=start_services, stop=stop_services)
+shell = Shell(title="Tools")
+shell.add(tool, prefix="/example")
+shell.run("127.0.0.1", 8765)
+# Alternatively: tool.run("127.0.0.1", 8765)
+```
+
+`start_services` and `stop_services` are your zero-argument functions; either callback can be omitted.
+The host binds before starting services, announces readiness afterward, and stops components in reverse order.
+Failed partial startup is cleaned up too. Shutdown drains accepted HTTP requests before component teardown;
+idle sockets have a 30-second timeout. A component's stop callback joins its owned workers. Independently
+owned jobs are untouched. Component instances support one host run; construct a new instance to run again.
+An optional `stop_event=threading.Event()` lets an embedding host request shutdown without Ctrl+C.
+
+Ordinary `App.mount()` and `App.run()` continue working without lifecycle callbacks. The
+[component contract](docs/component-contract.md) documents configuration and ownership boundaries.
+
+### Advanced integration: real downloader plus synthetic workbench
+
+This optional integration proof is separate from the self-contained demo above. The
+[combined example](examples/downloader_console.py) hosts an adapted downloader checkout and a
+small [synthetic workbench](examples/synthetic_workbench.py). It uses no models or research code.
+Run:
+
+```sh
+python examples/downloader_console.py --downloader-dir /path/to/librivox-download
+```
+
+The downloader checkout must include `librivox_web.py` with the component adapter. The example loads it
+using one common microweb runtime. It keeps its session, downloads and workbench state under ignored
+`data/downloader-console/` in this repository,
+created after socket binding and reused on later runs. Use `--state-dir /another/directory` only to override
+that location; an explicit relative path is relative to your working directory. The resolved path is printed
+at startup. No manual directory creation is required. This example always mounts both components; argument
+parsing is separate from the short composition code in `main()`. Use `--port` for an unused port. It does not automatically collect recordings;
+the real downloader controls still perform downloads if requested. The synthetic workbench reads completed,
+present, non-rejected recordings and runs only a trivial demonstration task. Its shutdown receipt is written
+under the chosen state directory. The actual voice-making application is not integrated by this example.
+
+### Component discovery
+
+An additional [optional discovery example](docs/discovery-example.md) mounts tools cloned into `components/`
+when they ship `microweb-component.json`. Run `python examples/component_console.py`; an empty console
+shows setup guidance. It never downloads or installs components. Data is kept separately under ignored `data/`.
+One checkout can provide several ordered panels and shared banners. Panels get navigation tabs; banners stay
+above every panel. The guide includes a synthetic two-panel/one-banner example to copy into `components/`.
 
 ## Copying and updates
 

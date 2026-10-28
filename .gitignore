@@ -4,3 +4,7 @@ __pycache__/
 AI/LOCAL.md
 microweb.py.bak
 .microweb-*
+/components/*
+!/components/.gitkeep
+/data/
+/console.local.json

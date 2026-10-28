@@ -11,9 +11,9 @@ Let a tool run independently or join a shared local console using the same appli
 framework standard-library-only and vendorable as one Python file. The optional shell supplies navigation;
 tools retain their own behavior, settings, state and dependencies.
 
-The first intended applications are a downloader and a voice workbench. The workbench's internal sections
-(readers, queue, recipes, listening, blending and packs) can remain one component. A component boundary is
-a separately usable application, not necessarily a section of its page.
+The first intended applications are a downloader and a voice workbench. A repository may provide multiple
+components: for example, two workbench panels and a Machine banner. Sections can also remain inside one
+component. Component boundaries describe hosted views and lifecycle ownership, not repository boundaries.
 
 ## Responsibilities
 
@@ -25,8 +25,9 @@ a separately usable application, not necessarily a section of its page.
 | Component | Routes, frontend, private state, configuration interpretation and its owned background services |
 | Independent worker | Scheduling and executing jobs that may outlive the console |
 
-No package discovery, shared database, unified job model or general configuration engine is required.
-Registration is explicit Python in the launcher. Installing one tool must not require another tool's ML stack.
+No shared database, unified job model or general configuration engine is required. Registration may be explicit
+Python or the [optional local discovery example](discovery-example.md); discovery is not part of the runtime.
+Installing one tool must not require another tool's ML stack.
 
 ## Component interface
 
@@ -108,6 +109,18 @@ shell.run("127.0.0.1", 8765)
 ```
 
 `Shell.add` mounts `component.app`, uses its label in navigation, and registers its lifecycle callbacks.
+It also accepts `description="Short purpose"`, plain presentation text for the Components overview. The same
+optional keyword is available on Shell.mount for ordinary Apps. Component's interface remains unchanged.
+The overview lists every registered view, including banners, with linked name/ID, purpose, placement and
+mount. Panel links select the shell view; banner links open the app directly. It reports registration,
+not live health. See [shell conventions](shell-conventions.md) for layout and terminology.
+Its default placement is `"panel"`. Use `shell.add(machine, prefix="/machine", placement="banner", height=80)`
+for a compact shared frame below navigation and above every panel, including the landing page. Banners
+have no navigation tab. Both placements share the same Component contract and lifecycle; placement belongs
+to the shell. Registration order determines tab order and banner stacking. Banner height is fixed in pixels,
+default 96; a component owns its compact layout. Shell navigation reloads frames, while services remain alive.
+Multiple components sharing one service must coordinate ownership in their application; the host calls each
+registered component's callbacks and does not deduplicate private resources.
 The existing `App.mount(prefix, app)` remains usable without Component or Shell; mounting an ordinary App
 does not discover or start background services. Existing plain `App.run()` remains supported.
 

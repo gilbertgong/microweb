@@ -1,0 +1,28 @@
+{
+  "component_api": 1,
+  "components": [
+    {
+      "id": "demo-machine",
+      "label": "Machine (demo)",
+      "description": "Shared synthetic machine summary; no hardware probes.",
+      "factory": "microweb_demo_components:machine",
+      "placement": "banner",
+      "height": 196,
+      "order": 10
+    },
+    {
+      "id": "demo-library",
+      "label": "Library (demo)",
+      "description": "Browse a synthetic library panel.",
+      "factory": "microweb_demo_components:library",
+      "order": 20
+    },
+    {
+      "id": "demo-workbench",
+      "label": "Workbench (demo)",
+      "description": "A second panel supplied by the same repository.",
+      "factory": "microweb_demo_components:workbench",
+      "order": 30
+    }
+  ]
+}

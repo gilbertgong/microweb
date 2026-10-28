@@ -113,6 +113,41 @@ class RoutingTests(unittest.TestCase):
         self.app.mount("/console", shell)
         self.assertIn(b'src="/console/tool/"', self.app.handle("GET", "/console/?tool=/tool")[2])
 
+    def test_overview_lists_panels_banners_and_escaped_descriptions_with_name_links(self):
+        from microweb import Component
+        shell = Shell()
+        shell.mount('/plain', App(), label='Plain app', description='<script>unsafe</script>')
+        shell.add(Component('metrics', 'Machine & status', App()), '/machine',
+                  placement='banner', description='Shared <summary>')
+        shell.add(Component('work', 'Workbench', App()), '/work', description='Tasks and results')
+        body = shell.handle('GET', '/')[2]
+        self.assertIn(b'<h1>Components</h1>', body)
+        self.assertEqual(body.count(b'<tr><td><strong>'), 3)
+        self.assertIn(b'&lt;script&gt;unsafe&lt;/script&gt;', body)
+        self.assertIn(b'&lt;summary&gt;', body)
+        self.assertIn(b'<a href="/machine/">Machine &amp; status</a>', body)
+        self.assertIn(b'<a href="/?tool=%2Fwork">Workbench</a>', body)
+        self.assertNotIn(b'>Open</a>', body)
+        self.assertNotIn(b'>View</th>', body)
+        self.assertIn(b'not component health checks', body)
+        parent = App(); parent.mount('/nested', shell)
+        body = parent.handle('GET', '/nested/')[2]
+        self.assertIn(b'<a href="/nested/machine/">', body)
+        self.assertIn(b'<a href="/nested/?tool=%2Fwork">', body)
+
+    def test_banner_only_overview_and_current_navigation(self):
+        from microweb import Component
+        shell = Shell()
+        shell.add(Component('banner', 'Banner', App()), '/banner', placement='banner')
+        body = shell.handle('GET', '/')[2]
+        self.assertIn(b'Shared banner', body)
+        self.assertNotIn(b'No panels registered', body)
+        self.assertIn(b'aria-label="Primary navigation"', body)
+        self.assertIn(b'<a href="/" aria-current="page">', body)
+        shell.mount('/panel', App())
+        selected = shell.handle('GET', '/?tool=/panel')[2]
+        self.assertIn(b'href="/?tool=%2Fpanel" aria-current="page"', selected)
+
 
 class FileTests(unittest.TestCase):
     def setUp(self):

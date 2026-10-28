@@ -60,3 +60,77 @@ Final validation: 37 microweb tests and 114 downloader tests pass on both Python
 syntax, Python syntax, documentation links, LF text and diff whitespace checks passed. The two runtime
 copies match byte-for-byte. The isolated HTTP proof covered combined and both standalone modes, range
 responses, saved decisions, synthetic task completion and preservation of an unrelated test process.
+
+## 2026-10-25 — Local manifest discovery example
+
+After checkpointing lifecycle/integration work, added the user-approved optional discovery launcher under examples/.
+Users clone component repositories into ignored components/ (only .gitkeep tracked); each tool supplies its own
+microweb-component.json. Metadata is read before import, compatible factories are constructed quietly and apps
+mount by ID. Load errors appear in the console without hiding healthy tools. Defaults plus explicit JSON overrides
+are passed to factories with a separate per-tool data directory, created after binding. Nothing downloads or installs
+code/dependencies. Existing explicit registration remains supported. The downloader ships a manifest
+with startup collection disabled. The synthetic workbench stays in the explicit example, not automatic discovery.
+
+The user extended the design to multiple components from one checkout, ordered panel tabs and shared banners.
+The manifest uses a components array with per-entry placement/order and optional banner height. Lower orders
+come first across repos, with ID as tie-breaker. Shell.add implements placement without changing Component's
+lifecycle interface. Banners appear on landing and every panel page; frames reload on shell navigation.
+The application owns coordination of services shared by its factories. Added a no-dependency synthetic checkout
+with two panels and one banner; it is installed only when copied explicitly. 48 tests pass on Python 3.12/3.14.
+Browser verification covered both demo panels, the real downloader's mounted pages and the banner above them.
+
+## 2026-10-27 — Promote reusable shell UI conventions
+
+At the user's request, brought the reviewed component-overview convention into the optional core Shell.
+Home now lists all registered panels and banners, with linked names/IDs, optional descriptions, placement
+and mount paths. Panel links select the shell view; banners open directly. Removed duplicate launch cards
+and action columns, added semantic table headers and current-page primary navigation. This reports registration,
+not component health. Plain App.mount, standalone apps, existing Shell signatures and lifecycle stay supported.
+Shell.add and Shell.mount gain optional description text; discovery validates/forwards the corresponding
+manifest field. Examples demonstrate descriptions. Shared layout/vocabulary guidance records the prototype
+lessons without moving its pagination, hardware metrics, fixed card dimensions or mock backend into the runtime.
+Runtime stays one stdlib Python file; discovery stays in examples. Existing downstream vendored copies are
+independent snapshots and are not automatically replaced by this change.
+Validation: all 51 tests pass on Python 3.12 and 3.14, including disposable release preparation. Browser
+checked the actual discovery example's three-row overview, description display, panel name navigation,
+active-page metadata, shared banner and direct banner link. Syntax/LF/local-link/whitespace checks passed.
+
+## 2026-10-27 — One-command self-contained demo
+
+The user wanted a useful example without depending on another project or package. examples/console.py now
+explicitly registers bundled Library and Workbench panels plus a synthetic Machine banner. It starts with
+one command from the repository root, no configuration/data setup or installs. The banner reuses the compact
+card/chart layout with CPU and memory only; the user explicitly excluded GPU from this example. All readings
+are fabricated, with no nvidia-smi, hardware-monitoring package, model, process or worker dependency.
+Library has sample records/status JSON and Workbench records a demo result in memory. Nothing writes data.
+The bundled manifest is also usable by the optional discovery example; explicit standalone modes use the same
+factories. The real-downloader integration proof remains separate and is labelled advanced in README.
+53 tests pass on Python 3.12/3.14 with site packages disabled, including a subprocess using only a copied
+runtime and bundled example outside the workspace. Browser verified both panels, CPU/memory chart and task
+button. The runtime itself did not change in this step; consuming projects' copies remain untouched.
+
+## 2026-10-27 — Restore web-server-first positioning
+
+The user clarified that console composition is a secondary optional feature. README now leads with the
+single-file Flask-style server, copying microweb.py beside app.py, a minimal App with page/JSON routes,
+and the python app.py command. Routing/request/response guidance precedes the optional console section.
+The bundled demo remains available there; lifecycle, discovery and advanced integration are nested under
+that optional section. Recorded the positioning preference in AI memory and aligned the plan/usage guide.
+Documentation only; no application behavior changed.
+
+## 2026-10-27 — Advanced example storage default
+
+The user found a required state-directory argument distracting in the integration example. It now defaults
+to ignored data/downloader-console/ relative to the repository, creates it after socket binding and reuses
+existing state. --state-dir remains an optional override; the resolved location is printed at readiness.
+A small launcher-owned Component wrapper prepares the directory before each tool's normal start and delegates
+cleanup. No framework storage requirement was introduced. The self-contained demo remains memory-only.
+All 55 tests pass on Python 3.12 and 3.14 with site packages disabled. Tests confirm the default needs no
+state argument, bind failure creates no directory, and successful startup/cleanup delegates normally.
+
+## 2026-10-27 — Simplify the integration launcher
+
+At the user's request, removed standalone branching from downloader_console.py and extracted parse_args.
+main now constructs the two apps and explicitly mounts /downloads and /voices before running the shell.
+The optional state override/default and deferred storage preparation remain. Standalone support in the
+framework and the separate self-contained console demo is unchanged.

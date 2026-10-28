@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Machine · synthetic demo</title>
+<style>
+:root{--blue:#2563a8;--green:#2f7d4f;--muted:#6b6b66;--line:#e2e1dc}
+*{box-sizing:border-box}body{margin:0;padding:8px 20px;font:12px/1.35 system-ui;background:#f6f6f4;color:#1d1d1b}
+.caption{display:flex;justify-content:space-between;gap:12px;margin-bottom:6px;font-size:11px;color:var(--muted)}
+.machine-wrap{width:max-content;margin-inline:auto}
+.machine{display:flex;gap:12px}
+.card{flex:0 0 275px;width:275px;height:150px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:8px 10px;min-width:0}
+.heading,.metric{display:flex;justify-content:space-between;align-items:baseline;gap:5px}
+.heading{margin-bottom:4px}.metric{font-size:11px;margin-top:2px}.muted{color:var(--muted)}
+progress{display:block;width:100%;height:5px;margin:2px 0;accent-color:var(--blue)}progress.ram{accent-color:var(--green)}
+.chart{display:block;width:100%;height:24px;margin-top:4px}.chart polyline{fill:none;stroke-width:1.5;vector-effect:non-scaling-stroke}
+.legend{font-size:10px;color:var(--muted);margin-top:2px}
+#error{color:#b3362f}
+</style></head><body>
+<div class="machine-wrap">
+<div class="caption"><span>Machine · <strong>SYNTHETIC DEMO</strong> · fabricated metrics and history</span><span id="error" role="status"></span></div>
+<div class="machine" id="machine"></div>
+</div>
+<script>
+const esc = s => String(s ?? '').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function chart(series,label){
+ const points=values=>values.map((v,i)=>`${i*240/Math.max(1,values.length-1)},${28-26*v/100}`).join(' ');
+ return `<svg class="chart" viewBox="0 0 240 30" preserveAspectRatio="none" role="img" aria-label="${esc(label)}">
+  <line x1="0" y1="29" x2="240" y2="29" stroke="var(--line)"/>
+  ${series.map(([values,color])=>`<polyline points="${points(values)}" stroke="${color}"/>`).join('')}</svg>`;
+}
+const meter=(value,color='',label='Utilization')=>`<progress class="${color}" value="${value}" max="100" aria-label="${esc(label)} percent"></progress>`;
+function memoryRow(label,total,free,color){
+ return `<div class="metric"><span>${label}</span><span class="muted">${(total-free).toFixed(1)} / ${total.toFixed(1)} GB · ${free.toFixed(1)} free</span></div>${meter(100*(total-free)/total,color,label)}`;
+}
+async function refresh(){
+ try{
+  const r=await fetch('api/machine');if(!r.ok)throw new Error('Machine status unavailable');const s=await r.json(),c=s.cpu,m=s.memory;
+  const windowLabel=`${s.history_seconds/60} min`;
+  let content=`<section class="card" aria-label="CPU status"><div class="heading"><strong>CPU</strong><span class="muted">${c.cores} logical cores</span></div>
+   <div class="metric"><span>${c.busy_pct.toFixed(0)}% busy</span><span class="muted">avg ${c.average_pct.toFixed(0)}% over ${windowLabel}</span></div>
+   ${meter(c.busy_pct,'','CPU load')}${chart([[c.history,'var(--blue)']],'CPU load history')}
+   <div class="legend">Load · last ${windowLabel}</div></section>
+   <section class="card" aria-label="Memory status"><div class="heading"><strong>Memory</strong></div>
+   ${memoryRow('RAM',m.ram_gb,m.ram_free_gb,'ram')}${memoryRow('Commit',m.commit_limit_gb,m.commit_free_gb,'')}
+   </section>`;
+  document.getElementById('machine').innerHTML=content;
+  document.getElementById('error').textContent='';
+ }catch(e){document.getElementById('error').textContent=e.message;}
+}
+refresh();setInterval(refresh,2000);
+</script></body></html>

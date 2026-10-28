@@ -4,9 +4,14 @@ Read `PLAN.md`, `LOCAL.md` if present, `PROJECT_LOG.md` when history matters, an
 when changing documentation structure. For operational requests read `USAGE.md` and the README.
 For component or shell integration work, read `../docs/component-contract.md`. Component and its lifecycle
 helpers are implemented; the real voice workbench remains a separate integration task.
+For console presentation, read `../docs/shell-conventions.md`: the home page is a component overview with
+linked names, including banners. Descriptions are optional display metadata. Application UI remains separate.
 
 ## Working preferences
 
+- Lead with the Flask-style, single-file web server: copy microweb.py, write an App, run it.
+  Keep console/shell composition a secondary optional feature in introductions, examples and documentation.
+  *Why:* the console is useful but should not obscure the framework's primary purpose or suggest extra setup.
 - Remember in the repo: preferences here, present state in PLAN, dated history in PROJECT_LOG.
   Local machine details belong only in ignored LOCAL.md. Shared docs must stand alone.
   *Why:* assistants and computers change; the repository carries the context.
@@ -14,6 +19,9 @@ helpers are implemented; the real voice workbench remains a separate integration
   *Why:* a stale description misleads the next reader.
 - Keep the runtime in one standard-library Python file, with clearly separated optional shell code.
   *Why:* consumers should be able to vendor one file without installing dependencies.
+- Keep manifest discovery in the optional examples launcher. Users clone component repos themselves;
+  never automatically download, update or install discovered tools or their dependencies.
+  *Why:* discovery is a convenience example, separate from the framework's primary use and explicit registration.
 - Keep application-specific behavior outside microweb. Discuss new directions before implementing them.
   *Why:* this is a reusable foundation, with downstream applications maintained independently.
 - Check versions and update only on explicit CLI actions. Never automatically update on import or startup.
