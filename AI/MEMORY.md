@@ -28,6 +28,9 @@ linked names, including banners. Descriptions are optional display metadata. App
   *Why:* consumers control when tested framework copies change.
 - Read release versions from `microweb.py`'s `__version__`, not a separate command-line argument.
   *Why:* the source file is the single place to set the intended version.
+- Release directly from staged changes, including manual version bumps, in one commit with generated metadata.
+  Do not require a preparatory commit. Reject unstaged tracked changes and non-ignored untracked files.
+  *Why:* the user wants one release commit covering the tested staged work and generated manifest.
 - Use the literal prefixed release version everywhere, for example v0.1.0 in source, manifest and tag.
   The release script must not add or remove the prefix; numerical comparison is internal only.
   *Why:* the user prefers one consistent version string rather than different source and tag forms.

@@ -73,7 +73,8 @@ class ReleaseTests(unittest.TestCase):
             cached = json.loads(cache_path.read_bytes())
             self.assertTrue(cached["passed"])
             self.assertEqual(cached["sha256"], manifest["sha256"])
-            self.assertEqual(cached["release_commit"], run("git", "rev-parse", "HEAD").stdout.strip())
+            self.assertEqual(cached["release_commit"], run("git", "rev-parse", "HEAD").stdout.strip(),
+                             result.stdout + result.stderr + run("git", "show-ref", "--head", "-d").stdout)
             self.assertEqual(run("git", "check-ignore", "tests/.release-cache/probe").returncode, 0)
             head_before = run("git", "rev-parse", "HEAD").stdout
             tag_before = run("git", "rev-parse", "refs/tags/v1.0.0").stdout
@@ -86,6 +87,7 @@ class ReleaseTests(unittest.TestCase):
                 self.assertIn("Release repository: example/microweb", duplicate.stdout)
                 self.assertEqual(duplicate.returncode, 0, duplicate.stdout + duplicate.stderr)
                 self.assertIn("already exists; validation only", duplicate.stdout)
+                self.assertIn("bump __version__ in microweb.py", duplicate.stdout)
                 self.assertIn("PASS: manifest version, download URL and SHA-256", duplicate.stdout)
                 self.assertIn("PASS: cached offline tests", duplicate.stdout)
                 self.assertNotIn("Running offline tests", duplicate.stdout)
@@ -135,12 +137,35 @@ class ReleaseTests(unittest.TestCase):
             # An explicit argument overrides an unsupported origin.
             run("git", "remote", "set-url", "origin", "https://example.invalid/other/repo.git")
             fixture_source.write_bytes(fixture_source.read_bytes().replace(b'__version__ = "v1.0.0"', b'__version__ = "v1.0.1"'))
+            unstaged = run(bash, "scripts/release.sh", "--repo", "example/microweb", check=False)
+            self.assertNotEqual(unstaged.returncode, 0)
+            self.assertIn("unstaged tracked changes", unstaged.stderr)
             run("git", "add", "microweb.py")
-            run("git", "commit", "-m", "Set next fixture version")
+            notes = root / "release-notes.txt"
+            notes.write_text("Included in the release commit\n", encoding="utf-8")
+            untracked = run(bash, "scripts/release.sh", "--repo", "example/microweb", check=False)
+            self.assertNotEqual(untracked.returncode, 0)
+            self.assertIn("untracked files remain", untracked.stderr)
+            run("git", "add", "release-notes.txt")
+            notes.write_text("An unstaged addition\n", encoding="utf-8")
+            partial = run(bash, "scripts/release.sh", "--repo", "example/microweb", check=False)
+            self.assertNotEqual(partial.returncode, 0)
+            self.assertIn("unstaged tracked changes", partial.stderr)
+            run("git", "add", "release-notes.txt")
+            commit_count = int(run("git", "rev-list", "--count", "HEAD").stdout)
             override = run(bash, "scripts/release.sh", "--repo", "example/microweb", check=False)
             self.assertEqual(override.returncode, 0, override.stdout + override.stderr)
             self.assertEqual(json.loads((root / "microweb.version").read_bytes())["version"], "v1.0.1")
+            self.assertEqual(int(run("git", "rev-list", "--count", "HEAD").stdout), commit_count + 1)
+            self.assertEqual(run("git", "show", "v1.0.1:release-notes.txt").stdout, "An unstaged addition\n")
+            self.assertEqual(run("git", "status", "--porcelain").stdout, "")
             # Failed tests restore the pre-release source and manifest.
+            saved_tag = run("git", "rev-parse", "refs/tags/v1.0.1").stdout.strip()
+            run("git", "tag", "-d", "v1.0.1")
+            no_bump = run(bash, "scripts/release.sh", "--repo", "example/microweb", check=False)
+            self.assertNotEqual(no_bump.returncode, 0)
+            self.assertIn("bump __version__ in microweb.py above v1.0.1", no_bump.stderr)
+            run("git", "update-ref", "refs/tags/v1.0.1", saved_tag)
             fixture_source.write_bytes(fixture_source.read_bytes().replace(b'__version__ = "v1.0.1"', b'__version__ = "v1.1.0"'))
             source_before = fixture_source.read_bytes()
             manifest_before = (root / "microweb.version").read_bytes()
@@ -148,12 +173,16 @@ class ReleaseTests(unittest.TestCase):
                 'import unittest\nclass Failure(unittest.TestCase):\n def test_fail(self): self.fail("fixture")\n',
                 encoding="utf-8")
             run("git", "add", ".")
-            run("git", "commit", "-m", "Introduce fixture failure")
+            staged_before = run("git", "ls-files", "--stage").stdout
+            status_before = run("git", "status", "--porcelain").stdout
+            head_before = run("git", "rev-parse", "HEAD").stdout
             self.assertNotEqual(run(bash, "scripts/release.sh", "--repo", "example/microweb", check=False).returncode, 0)
             self.assertEqual((root / "microweb.py").read_bytes(), source_before)
             self.assertEqual((root / "microweb.version").read_bytes(), manifest_before)
             self.assertEqual(run("git", "tag", "--list", "v1.1.0").stdout, "")
-            self.assertEqual(run("git", "status", "--porcelain").stdout, "")
+            self.assertEqual(run("git", "ls-files", "--stage").stdout, staged_before)
+            self.assertEqual(run("git", "status", "--porcelain").stdout, status_before)
+            self.assertEqual(run("git", "rev-parse", "HEAD").stdout, head_before)
             (root / "microweb.py").write_bytes(source_before + b"# local edit\n")
             self.assertNotEqual(run(bash, "scripts/release.sh", "--repo", "example/microweb", check=False).returncode, 0)
 

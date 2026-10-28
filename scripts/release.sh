@@ -21,6 +21,10 @@ def git(*args):
 def report(message):
     print(message, flush=True)
 
+def release_commit():
+    # Avoid ^{}: MSYS2 Git can glob its braces when invoked from native Python.
+    return git("rev-list", "-n", "1", f"refs/tags/{tag}")
+
 def run_tests():
     report(f"Running offline tests with {sys.executable} ...")
     subprocess.run([sys.executable, "-B", "-m", "unittest", "discover", "-s", "tests", "-q"], check=True)
@@ -37,7 +41,7 @@ def test_cache():
             content = Path(name).read_bytes()
             inputs.update(len(content).to_bytes(8, "big") + content)
     state = {"schema": 1, "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
-             "release_commit": git("rev-parse", f"refs/tags/{tag}^{{}}"),
+             "release_commit": release_commit(),
              "test_inputs_sha256": inputs.hexdigest(),
              "python": sys.version, "executable": sys.executable}
     key = hashlib.sha256(json.dumps(state, sort_keys=True).encode("utf-8")).hexdigest()
@@ -79,7 +83,7 @@ def validate_release():
             sys.exit(f"Release validation failed: {message}")
         report(f"PASS: {message}")
     require(git("cat-file", "-t", f"refs/tags/{tag}") == "tag", "annotated release tag")
-    require(subprocess.run(["git", "merge-base", "--is-ancestor", f"refs/tags/{tag}^{{}}", "HEAD"]).returncode == 0,
+    require(subprocess.run(["git", "merge-base", "--is-ancestor", release_commit(), "HEAD"]).returncode == 0,
             "release commit belongs to current history")
     tagged_source = subprocess.check_output(["git", "show", f"refs/tags/{tag}:microweb.py"])
     tagged_manifest = subprocess.check_output(["git", "show", f"refs/tags/{tag}:microweb.version"])
@@ -93,7 +97,7 @@ def validate_release():
     expected = {"version": version, "url": f"{raw}/refs/tags/{tag}/microweb.py",
                 "sha256": hashlib.sha256(tagged_source).hexdigest()}
     require(json.loads(tagged_manifest) == expected, "manifest version, download URL and SHA-256")
-    report(f"Release commit: {git('rev-parse', f'refs/tags/{tag}^{{}}')}")
+    report(f"Release commit: {release_commit()}")
     report(f"SHA-256: {expected['sha256']}")
 
 parser = argparse.ArgumentParser(description="Create or validate a local microweb release. Never pushes.")
@@ -133,13 +137,16 @@ raw = f"https://raw.githubusercontent.com/{repository}"
 manifest_path = Path("microweb.version")
 if git("tag", "--list", tag):
     report(f"Release {tag} already exists; validation only. Release files, commits and tags stay unchanged.")
+    report("To generate a new release, bump __version__ in microweb.py and stage your changes first.")
     validate_release()
     cached_tests()
     report(f"Validated {tag} locally. No network requests or pushes performed.")
     sys.exit(0)
 report("Checking prerequisites for a new release ...")
-if git("status", "--porcelain"):
-    sys.exit("Commit or stash working-tree changes before creating a release")
+if subprocess.run(["git", "diff", "--quiet", "--"]).returncode != 0:
+    sys.exit("Stage all intended changes before releasing; unstaged tracked changes remain (git diff).")
+if git("ls-files", "--others", "--exclude-standard"):
+    sys.exit("Stage intended new files or ignore unrelated files before releasing; untracked files remain.")
 git("rev-parse", "--verify", "HEAD")
 if git("branch", "--show-current") != "main":
     sys.exit("Create releases on main; its manifest announces the latest release")
@@ -149,8 +156,10 @@ old_manifest = manifest_path.read_bytes() if manifest_path.exists() else None
 if old_manifest is not None:
     previous = json.loads(old_manifest)["version"]
     if tuple(map(int, version[1:].split("."))) <= tuple(map(int, previous[1:].split("."))):
-        sys.exit("__version__ must be newer than the previous release manifest")
-report("PASS: clean main, Git identity, unused tag and increasing version")
+        sys.exit("To generate a new release, bump __version__ in microweb.py above "
+                 f"{previous}, then stage the change.")
+report("PASS: staged working changes, main, Git identity, unused tag and increasing version")
+report("The release commit will include all staged changes plus the generated source/manifest updates.")
 text, count = re.subn(r'^UPDATE_URL = .*$', f'UPDATE_URL = "{raw}/main/microweb.version"', text, count=1, flags=re.M)
 assert count == 1
 data = text.replace("\r\n", "\n").encode("utf-8")

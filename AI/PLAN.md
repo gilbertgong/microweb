@@ -32,7 +32,9 @@ The optional Shell supplies navigation and embeds mounted apps; it does not mana
 - Bash release workflow that tests, commits and tags locally; runnable standalone/combined example.
   Verbose progress and final local integrity validation; existing tags validate without changing release artifacts.
   Test passes cached under ignored tests/.release-cache/ by source hash, release commit, inputs and interpreter.
-  The version comes directly from committed `__version__`; GitHub OWNER/REPO is detected from origin
+  One release commit includes staged changes/version bump and generated metadata; no preparatory commit.
+  Unstaged tracked changes/non-ignored untracked files rejected; failed tests preserve staging.
+  The version comes directly from staged `__version__`; GitHub OWNER/REPO is detected from origin
   or supplied with --repo OWNER/REPO. Missing remote setup gets an explanatory message without changes.
 
 ## Status and next steps
@@ -47,7 +49,8 @@ copied demo, discovery, descriptions/overview, placement/order, lifecycle, activ
 synthetic-workbench and disposable release checks. Browser checked shell navigation, mounted downloader pages and
 audio playback, and a completed synthetic task. A further isolated discovery browser check verified two panels
 from one checkout plus a shared banner, also above the downloader and its Review page. The GitHub origin is
-configured and the source version is v0.1.0. Source, manifest and tag use the same literal prefixed string.
+configured. Each release's source, manifest and tag use the same literal prefixed version string;
+a staged bump prepares the next release without manually updating the manifest.
 Release tooling prepares a local commit, checksum manifest and
 annotated tag; publishing requires a separate explicit push request. The downloader adapter uses the same
 controller and retains standalone operation.

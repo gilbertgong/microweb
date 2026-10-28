@@ -47,8 +47,11 @@ Development copies cannot self-update until released. Never silently force past 
 
 ## Prepare a release
 
-Only when requested: inspect a clean committed main and configured Git identity, choose the actual OWNER/REPO,
-set and commit a new `__version__` such as `v0.1.0` in microweb.py, then run `bash scripts/release.sh`.
+Only when requested: inspect main and configured Git identity, choose the actual OWNER/REPO,
+set a new `__version__` such as `v0.1.0` in microweb.py, then stage all intended release files.
+Run `bash scripts/release.sh` without a preparatory commit. It rejects unstaged tracked changes and
+non-ignored untracked files. Its one release commit includes all staged work and generated updates.
+Failed tests restore source/manifest bytes and preserve the user's staged work.
 It detects the GitHub repository from origin; `--repo OWNER/REPO` overrides detection.
 Without a usable origin or explicit argument it explains how to configure either, and changes nothing.
 It reads the version from the source and creates a local commit and tag without pushing.
@@ -57,6 +60,8 @@ Verify the manifest SHA-256 matches tagged microweb.py bytes. Publishing is a se
 Rerunning the script for an existing tag performs local validation without changing release artifacts. Read its
 step-by-step report; a mismatch is a failure to investigate, not permission to replace the tag. It allows
 later tooling/docs commits but requires source and manifest to match the tagged release exactly.
+An existing tag also prints guidance to bump __version__ in microweb.py and stage it for a new release;
+never replace an existing tag to publish changed source under the same version.
 Successful test runs are cached in ignored tests/.release-cache/ against the source SHA-256, release
 commit, test/script/example inputs and interpreter. Matching passes skip tests; integrity validation
 always runs. Missing/invalid/mismatched cache entries run tests normally. Failures are not cached.

@@ -175,3 +175,29 @@ always test before committing and save the pass after final validation. Cache wr
 All 56 tests pass on Python 3.12/3.14. Disposable-repo checks cover argument errors, cache hits, missing/
 corrupt records, invalidation by new tests and uncached failures. Two actual v0.1.0 validations confirmed
 first-run cache population and second-run reuse. Release artifacts/tag remain unchanged; nothing pushed.
+
+
+## 2026-10-27 — MSYS2 release commit lookup fix
+
+A user release attempt exposed a Python-to-MSYS2-Git argument handling difference: refs/tags/TAG^{}
+was interpreted as TAG^, returning the parent rather than the release commit. The cache assertion caught
+this and preparation restored the source/manifest before any release commit or tag was created.
+Reproduced under MSYS2 Bash with UCRT64 Python 3.14 and /usr/bin/git. Replaced brace-based peeling with
+git rev-list -n 1 refs/tags/TAG for cache identity, ancestry validation and progress reporting. Existing
+incorrect cache entries automatically miss because the corrected commit changes their key. Added failure
+diagnostics to the disposable release test. All 56 tests pass under MSYS2 and Python 3.12/Git Bash.
+
+
+## 2026-10-27 — One release commit from staged work
+
+The user replaced the preparatory-commit requirement with a staged release workflow. Set the intended
+__version__, stage all intended files, then run release.sh. The script rejects unstaged tracked changes
+and non-ignored untracked files, generates source/manifest updates, tests, and commits all staged work
+plus those updates in one release commit and annotated tag. Failed tests restore generated working-file
+changes before any staging by the script, preserving the user's original index and HEAD.
+Existing tags still select integrity validation/cached tests, with explicit guidance to bump __version__
+in microweb.py and stage it to generate a new release. Non-increasing versions also get that guidance.
+All 56 tests pass under actual MSYS2/UCRT64 Python 3.14 and Python 3.12/Git Bash. Disposable-repo tests
+verify a single additional release commit includes staged source and new files, partial/untracked changes
+are rejected, failed tests preserve staging/HEAD, and unchanged versions provide bump guidance.
+No actual release or push was performed while implementing this workflow.

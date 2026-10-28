@@ -183,8 +183,9 @@ bash scripts/release.sh
 ```
 
 The release script needs Bash, Git and Python. Creating a new release also requires a configured Git
-author, a committed clean working tree and branch `main`. Set `PYTHON` to choose an interpreter. On Windows use Git Bash or another Bash
-installation with Git and Python on PATH.
+author, an existing commit and branch `main`. Stage all intended changes first; unstaged tracked changes
+and non-ignored untracked files are rejected. Set `PYTHON` to choose an interpreter. On Windows use Git Bash
+or MSYS2 with Git and Python on PATH.
 
 The GitHub repository is detected from `origin` (HTTPS, `git@github.com:OWNER/REPO.git`, or
 `ssh://git@github.com/OWNER/REPO.git`). It supplies the location for the release manifest and
@@ -192,14 +193,21 @@ download URLs; detection makes no network requests. To override it, or if no rem
 use `bash scripts/release.sh --repo OWNER/REPO`. With no arguments and no usable origin, the script explains
 these options and exits without changing files or configuring a remote.
 
-Set `__version__` in `microweb.py` to the intended release (for example `v0.1.0`) and commit
-that change before running the script. Development suffixes are refused. The version must be newer
-than the previous manifest when creating a new release.
+Set `__version__` in `microweb.py` to the intended release (for example `v0.1.0`), then stage that change
+along with everything intended for the release. No preparatory commit is needed. Development suffixes
+are refused. The version must be newer than the previous manifest when creating a new release.
+
+```bash
+git add <files-for-this-release>
+bash scripts/release.sh
+```
 
 The script reads that embedded version, sets the manifest URL, hashes the final LF Python file, writes
-`microweb.version`, runs tests, then creates a release commit and annotated tag. The source version,
+`microweb.version`, runs tests, then creates one release commit containing all staged changes and its
+generated updates, plus an annotated tag. The source version,
 manifest version and tag are the same literal string, including `v`; the script adds or removes no prefix.
-It never pushes. If tests fail it restores the source and manifest. A later Git failure leaves
+It never pushes. If tests fail it restores the source and manifest and leaves your staged work intact.
+A later Git failure leaves
 prepared work available for inspection; inspect `git status` and tags before retrying.
 Progress messages describe preparation, tests, commit/tag creation and final validation.
 If the version's tag already exists, the script validates it without changing release files, commits or
@@ -207,6 +215,8 @@ tags. It checks the annotated tag and its ancestry, matching working/tagged sour
 manifest bytes, LF, embedded update URL, manifest version/download URL and SHA-256. Later documentation or
 tooling commits are allowed; changed release artifacts fail validation. Validation is local and makes no
 network requests, so it does not confirm publication on GitHub.
+It also explains that creating a new release requires bumping `__version__` in `microweb.py` and staging
+the change. If source changes still use an existing version, validation fails rather than replacing its tag.
 Successful tests are cached under ignored `tests/.release-cache/`, keyed by source SHA-256 and release
 commit, current test/script/example inputs and Python interpreter. A matching pass skips tests while
 integrity validation still runs every time. Missing, invalid or mismatched records run tests normally;
