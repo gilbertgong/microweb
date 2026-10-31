@@ -52,6 +52,9 @@ Importing the tool and calling its factory must not start services, launch jobs,
 files. Factories may read startup settings and register routes. Filesystem creation, registry scans and
 other startup writes belong in `start()` or explicit user operations.
 
+After startup, explicit user actions through the application may launch services or jobs and modify files.
+The application should define ownership and shutdown behavior for any services it launches.
+
 The initial contract assumes one host run per component instance. Repeated start/stop cycles on the same
 instance are not required. `stop()` must tolerate partial startup and repeated cleanup without damaging state.
 The host rejects duplicate component IDs and conflicting mounts before starting services.
