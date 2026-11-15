@@ -90,3 +90,8 @@ navigation integration; mounting and routing do not depend on frames.
 `tests/` contains offline tests; `scripts/release.sh` performs local release preparation.
 `docs/component-contract.md` specifies the module/configuration/lifecycle boundary.
 `docs/shell-conventions.md` records overview, navigation, banner-layout and UI vocabulary conventions.
+
+Default origin checks now accept exact HTTPS Host matches and local HTTP exceptions for localhost,
+127.0.0.1 and ::1, shared by HTTP mutations and WebSocket upgrades. Explicit route allowlists retain
+precedence; no forwarded-header trust is introduced. Latest validation: 116 full tests on Python 3.12
+and all 49 WebSocket tests on Python 3.14. Source change is not yet released.

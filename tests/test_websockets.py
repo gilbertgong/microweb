@@ -85,6 +85,31 @@ def connect(server, path="/ws", extra=b""):
 
 
 class HandshakeTests(unittest.TestCase):
+    def test_default_origin_policy_is_shared_with_http_mutations(self):
+        app = App()
+        app.websocket("/ws")(lambda ws: None)
+        app.post("/command")(lambda req: "ok")
+        cases = [("example.test", "https://example.test", True),
+                 ("example.test:8443", "https://example.test:8443", True),
+                 ("localhost:8765", "http://localhost:8765", True),
+                 ("127.0.0.1:8765", "http://127.0.0.1:8765", True),
+                 ("[::1]:8765", "http://[::1]:8765", True),
+                 ("localhost", "https://localhost", True),
+                 ("example.test", "http://example.test", False),
+                 ("192.168.1.10", "http://192.168.1.10", False),
+                 ("example.test", "https://other.test", False),
+                 ("example.test:8443", "https://example.test", False),
+                 ("127.0.0.1:8765", "http://127.0.0.1:8766", False),
+                 ("[bad", "https://[bad", False),
+                 ("localhost:bad", "http://localhost:bad", False),
+                 ("user@localhost", "http://user@localhost", False),
+                 ("example.test/path", "https://example.test/path", False)]
+        for host, origin, allowed in cases:
+            with self.subTest(host=host, origin=origin):
+                values = {**headers(host), "Origin": origin}
+                self.assertEqual(app.handle("GET", "/ws", headers=values)[0], 101 if allowed else 403)
+                self.assertEqual(app.handle("POST", "/command", headers=values)[0], 200 if allowed else 403)
+
     def setUp(self):
         self.app = App()
         self.app.websocket("/ws")(lambda ws: None)

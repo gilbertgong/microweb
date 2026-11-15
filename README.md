@@ -54,8 +54,9 @@ Each request has its own thread. Protect shared mutable application state and ru
 your own workers. HEAD falls back to GET handlers, so GET handlers must not change state.
 Bodies require Content-Length and default to a 1 MB limit; `req.body(max_bytes=...)` or
 `req.json(max_bytes=...)` can override it. Chunked uploads are unsupported.
-Origin-bearing mutation requests must match the HTTP Host by default; `same_origin=False`
-disables that check. This local HTTP server has no authentication, TLS, proxy handling, or public
+Origin-bearing mutation and WebSocket requests accept matching HTTPS origins by default, plus matching
+HTTP origins for `localhost`, `127.0.0.1` and `[::1]`. Ports must match exactly; `same_origin=False`
+disables the default check. Explicit WebSocket origin allowlists still override that route's policy. This local HTTP server has no authentication, TLS, proxy handling, or public
 deployment support. Bind to loopback for the intended desktop use.
 
 ## WebSockets
