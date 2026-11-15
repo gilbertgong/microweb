@@ -115,3 +115,9 @@ Relays can call ws.send((header, payload_memoryview)) without joining PCM payloa
 backing data stable until synchronous send returns; prevalidate application headers separately. Use
 ws.recv() when ConnectionError on disconnect fits a helper, or receive()/iteration for normal closure
 without exceptions. Neither naming nor tuple support implies complete websockets-package compatibility.
+
+
+For receive-copy performance investigation, see WS_RECEIVE_COPIES.md. Run
+`python -B scripts/benchmark_ws_receive.py --baseline REV` against a known baseline Git
+revision. The synthetic parser benchmark is separate from the wire-level correctness tests
+and does not measure network throughput or end-to-end audio latency.

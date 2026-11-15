@@ -384,6 +384,8 @@ class WebSocket:
     def _read_exact(self, size, *, idle=False):
         # Keep bytes across waits. An idle connection has no deadline; once a
         # frame starts, a stalled peer gets a bounded I/O deadline.
+        if size == 0:
+            return b""
         deadline = None if idle and not self._buffer else time.monotonic() + self.timeout
         while len(self._buffer) < size:
             self._wait(deadline=deadline)
@@ -393,10 +395,13 @@ class WebSocket:
                 continue
             if not chunk:
                 raise ConnectionError("WebSocket EOF")
+            if not self._buffer and len(chunk) == size:
+                return chunk
             self._buffer.extend(chunk)
             if deadline is None:
                 deadline = time.monotonic() + self.timeout
-        result = bytes(self._buffer[:size])
+        with memoryview(self._buffer)[:size] as view:
+            result = bytes(view)
         del self._buffer[:size]
         return result
 
@@ -528,13 +533,17 @@ class WebSocket:
                 continue
             if self._close_sent:
                 continue
-            if opcode in (1, 2):
-                self._fragment_opcode = opcode
-            self._fragment.extend(payload)
-            if not fin:
-                continue
-            opcode, message = self._fragment_opcode, bytes(self._fragment)
-            self._fragment_opcode, self._fragment = None, bytearray()
+            if fin and opcode in (1, 2):
+                # Complete messages already own their immutable unmasked payload.
+                message = payload
+            else:
+                if opcode in (1, 2):
+                    self._fragment_opcode = opcode
+                self._fragment.extend(payload)
+                if not fin:
+                    continue
+                opcode, message = self._fragment_opcode, bytes(self._fragment)
+                self._fragment_opcode, self._fragment = None, bytearray()
             self._message_bytes = len(message)
             if opcode == 1:
                 try:

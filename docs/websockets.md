@@ -46,6 +46,10 @@ Run `python examples/websocket_echo.py` for a browser example, including a 500 K
 - `ws.ping(payload=b'')`: optional manual ping, with at most 125 payload bytes. Applications normally
   rely on automatic keepalive instead. Only automatic heartbeat pings are tracked for timeout detection.
 
+Complete single-frame binary messages reuse their unmasked payload as the queued `bytes`
+object. Fragmented messages are assembled before delivery. This avoids extra message-assembly
+copies in the common path; receive still performs WebSocket unmasking and socket/buffer work.
+
 Sends are serialized across threads. Only one application receiver may wait at a time. Application
 code should stop its connection-specific work when the connection closes. The host closes connections
 when handlers return, stop iterating or raise; handler errors use close code 1011.
