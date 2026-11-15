@@ -108,8 +108,9 @@ keepalive and malformed peers with tests/test_websockets.py rather than modifyin
 For PCM relay routes, configure max_bytes for the largest expected packet/control message and
 max_queue_bytes for tolerable backlog, rather than leaving a multi-MiB generic queue. Keep max_queue
 as an independent object-count ceiling. See the format-specific arithmetic in docs/websockets.md.
-TLS-terminated apps should use explicit route origins; do not bypass all origin checks or assume
-forwarded headers are trusted.
+TLS-terminated apps accept matching HTTPS origins by default when the public Host is preserved.
+Use explicit route origins when the proxy rewrites Host or a custom policy is needed; do not bypass
+all origin checks or assume forwarded headers are trusted.
 
 Relays can call ws.send((header, payload_memoryview)) without joining PCM payload buffers. Keep all
 backing data stable until synchronous send returns; prevalidate application headers separately. Use

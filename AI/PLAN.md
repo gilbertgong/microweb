@@ -94,4 +94,4 @@ navigation integration; mounting and routing do not depend on frames.
 Default origin checks now accept exact HTTPS Host matches and local HTTP exceptions for localhost,
 127.0.0.1 and ::1, shared by HTTP mutations and WebSocket upgrades. Explicit route allowlists retain
 precedence; no forwarded-header trust is introduced. Latest validation: 116 full tests on Python 3.12
-and all 49 WebSocket tests on Python 3.14. Source change is not yet released.
+and all 49 WebSocket tests on Python 3.14. Included in v0.2.2.
