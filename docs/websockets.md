@@ -22,10 +22,17 @@ Run `python examples/websocket_echo.py` for a browser example, including a 500 K
 ## Connection API
 
 - `ws.req`: the opening request, including query parameters and mount-aware `req.url()`.
-- `ws.send(str_or_bytes)`: send one complete, unfragmented text or binary message. Bytes-like objects
-  are accepted. Oversized messages raise `ValueError`; closed connections or stalled sends raise `OSError`.
+- `ws.send(data)`: send one complete, unfragmented text or binary message. Accepts a string, a binary
+  buffer (`bytes`, `bytearray`, contiguous `memoryview`), or a list/tuple of up to 256 binary buffers.
+  A buffer sequence is one binary message in one frame, not a series of messages or fragments.
+  Every part and the combined size are checked before sending any bytes. Oversized messages raise
+  `ValueError`; unsupported types/non-contiguous views raise `TypeError`; closed connections or
+  stalled sends raise `OSError`.
 - `ws.receive()`: wait for one complete message, returning `str` or `bytes`. After buffered messages
   have been delivered, closure returns `None`. Empty text and empty binary messages remain distinct.
+- `ws.recv()`: the same message delivery, but raises `ConnectionError("WebSocket closed")` when
+  `receive()` would return `None`. This convenience supports familiar blocking-client style; it doesn't
+  implement the `websockets` package's exception hierarchy or optional recv arguments.
 - `for message in ws`: iterate until closure. Fragment reassembly and control frames are internal.
 - `ws.closed`, `ws.close_code`, `ws.close_reason`: connection state. Unexpected I/O loss uses code 1006
   locally; that reserved code is never sent on the wire. An empty peer close uses local code 1005.
@@ -132,3 +139,28 @@ not a format negotiation mechanism; channels, sample rate, endianness and packet
 application. A large memory budget can also mean undesirable latency. Configure it deliberately.
 The transport doesn't silently drop audio on overflow or interpret an audio format. Tests exercise
 a 400 ms consumer pause during paced 20 ms PCM traffic, and bounded disconnection for sustained backlog.
+
+## Sending a header and shared payload
+
+```python
+import struct
+
+header = struct.pack('!BII', 1, stream_id, packet_id)
+payload = memoryview(packet)[9:]
+for target in destinations:
+    target.send((header, payload))
+```
+
+The transport calculates one combined frame length and writes its frame header and each application
+buffer separately, without joining them or copying the binary payload into another Python buffer.
+The same payload memoryview can be reused across recipients. These are synchronous writes: callers
+must keep backing buffers unchanged until send returns. Internally created views are released on
+success or failure; caller-owned views remain usable. The OS may still copy data into network buffers.
+
+The send lock and one send deadline cover the entire message, so concurrent data or control sends
+cannot split its parts. A transport failure after writing part of a frame closes the connection.
+This may use several socket writes; it doesn't imply a single system call or zero-copy networking.
+
+This produces the same received binary message as `websockets.send((header, payload))`, but differs
+in wire framing: that package treats iterable items as separate fragments. Microweb sends one final
+binary frame. Arbitrary generators and sequences of text fragments are not supported.

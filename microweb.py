@@ -272,6 +272,7 @@ class _Server(ThreadingHTTPServer):
 # Optional WebSocket transport -----------------------------------------------
 
 _WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+_WS_MAX_PARTS = 256
 
 
 class _WebSocketError(Exception):
@@ -400,48 +401,78 @@ class WebSocket:
         return result
 
     def _frame(self, opcode, payload, timeout=None, *, closing=False):
+        parts = payload if isinstance(payload, tuple) else (memoryview(payload),)
+        length = sum(part.nbytes for part in parts)
         timeout = self.timeout if timeout is None else timeout
         deadline = time.monotonic() + timeout
         if not self._send_lock.acquire(timeout=max(0, timeout)):
             raise TimeoutError("WebSocket sender busy")
+        data = None
         try:
             if self.closed or (self._close_sent and not closing):
                 raise ConnectionError("WebSocket is closing")
             if opcode == 8 and self._close_sent:
                 return
-            length = len(payload)
             header = (struct.pack("!BB", 0x80 | opcode, length) if length < 126 else
                       struct.pack("!BBH", 0x80 | opcode, 126, length) if length < 65536 else
                       struct.pack("!BBQ", 0x80 | opcode, 127, length))
-            data = memoryview(header + payload)
-            while data:
-                self._wait(writing=True, deadline=deadline)
-                try:
-                    sent = self._sock.send(data)
-                except (BlockingIOError, InterruptedError):
-                    continue
-                if not sent:
-                    raise ConnectionError("WebSocket EOF")
-                data = data[sent:]
+            # One frame, multiple writes. Never concatenate the application
+            # payload; the send lock and deadline cover every part together.
+            for part in (memoryview(header),) + parts:
+                data = part
+                while data:
+                    self._wait(writing=True, deadline=deadline)
+                    try:
+                        sent = self._sock.send(data)
+                    except (BlockingIOError, InterruptedError):
+                        continue
+                    if not sent:
+                        raise ConnectionError("WebSocket EOF")
+                    data = data[sent:]
             if opcode == 8:
                 self._close_sent = True
         except OSError:
             self._abort()
             raise
         finally:
+            if data is not None:
+                data.release()
             self._send_lock.release()
 
     def send(self, data):
-        """Send one unfragmented message; raises on closure or a stalled peer."""
+        """Send one message, optionally from a list/tuple of binary buffers.
+
+        Binary buffers aren't copied or joined: keep their contents unchanged
+        until send returns. Non-contiguous memoryviews aren't supported.
+        """
         if isinstance(data, str):
-            opcode, payload = 1, data.encode("utf-8")
+            opcode, values = 1, (data.encode("utf-8"),)
         elif isinstance(data, (bytes, bytearray, memoryview)):
-            opcode, payload = 2, bytes(data)
+            opcode, values = 2, (data,)
+        elif isinstance(data, (list, tuple)):
+            values = tuple(data)
+            if len(values) > _WS_MAX_PARTS:
+                raise ValueError(f"WebSocket.send accepts at most {_WS_MAX_PARTS} buffers")
+            opcode = 2
         else:
-            raise TypeError("WebSocket.send expects str or bytes")
-        if len(payload) > self.max_bytes:
-            raise ValueError("WebSocket message exceeds max_bytes")
-        self._frame(opcode, payload)
+            raise TypeError("WebSocket.send expects str, bytes, or a list/tuple of binary buffers")
+        parts, length = [], 0
+        try:
+            for value in values:
+                if not isinstance(value, (bytes, bytearray, memoryview)):
+                    raise TypeError("WebSocket.send parts must be binary buffers")
+                try:
+                    view = memoryview(value).cast("B")
+                except (TypeError, ValueError):
+                    raise TypeError("WebSocket.send requires contiguous binary buffers") from None
+                parts.append(view)
+                length += view.nbytes
+                if length > self.max_bytes:
+                    raise ValueError("WebSocket message exceeds max_bytes")
+            self._frame(opcode, tuple(parts))
+        finally:
+            for part in parts:
+                part.release()
 
     def ping(self, payload=b""):
         if not isinstance(payload, (bytes, bytearray, memoryview)):
@@ -557,6 +588,13 @@ class WebSocket:
                 return message
         finally:
             self._receive_lock.release()
+
+    def recv(self):
+        """receive() convenience variant that raises ConnectionError on closure."""
+        message = self.receive()
+        if message is None:
+            raise ConnectionError("WebSocket closed")
+        return message
 
     def close(self, code=1000, reason="", *, timeout=1):
         """Bounded closing handshake. Safe to call repeatedly or from another thread."""

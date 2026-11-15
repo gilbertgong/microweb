@@ -74,6 +74,8 @@ automatically. Defaults bound messages to 1 MiB and queued payload to four times
 256-message ceiling for object overhead. Audio routes can configure a smaller byte budget for latency.
 Each connection
 uses its application request thread plus one protocol reader thread. Heartbeat timings are configurable.
+`ws.send((header, payload))` sends binary buffers as one message without joining the payload in Python.
+`ws.recv()` offers exception-on-closure naming alongside the `None`-returning `ws.receive()`.
 Run `python examples/websocket_echo.py` for a mounted browser demo, or read
 [WebSocket usage and limits](docs/websockets.md) for the API, lifecycle and supported protocol features.
 

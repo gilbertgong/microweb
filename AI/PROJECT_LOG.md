@@ -268,3 +268,20 @@ sustained backlog. Audio-format interpretation and latency/drop policy remain ap
 
 Validation: all 103 tests pass on Python 3.12 and Python 3.14 under MSYS2/UCRT64, including
 36 WebSocket tests. Whitespace checks pass. No consumer copies, application state or jobs changed.
+
+## 2026-11-14 — Multipart binary send and recv convenience
+
+User authorized bounded list/tuple binary-buffer sends and recv() raising ConnectionError on closure,
+while receive() retains its None-returning behavior. Multipart sends are one final binary frame, not
+fragment-per-item compatibility with the websockets package. Prevalidate all parts, contiguity and
+combined max_bytes; snapshot the sequence of references without copying payloads. One lock/deadline
+spans frame header and buffer writes. The existing single-buffer path also avoids payload concatenation.
+Caller buffers must remain unchanged during synchronous send; OS copies are outside this guarantee.
+Release internal views even after partial-write errors; caller views remain reusable across recipients.
+At most 256 parts; no arbitrary generators or mixed text/binary parts. Added wire framing, identity,
+partial write/failure, validation-before-output, concurrency, extended lengths, empty-message and
+retained-exception buffer-lifetime tests. This is limited naming/usage compatibility, not the complete
+websockets API or its exception types.
+
+Validation: all 112 offline tests pass on Python 3.12 and Python 3.14/MSYS2/UCRT64, including
+45 WebSocket tests. Whitespace checks pass. No consumer copies or running services changed.

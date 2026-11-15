@@ -332,6 +332,141 @@ class TransportTests(unittest.TestCase):
             for mask in (b"\0\0\0\0", b"abcd", b"\xff\x80\x01\xfe"):
                 self.assertEqual(_ws_unmask(data, mask), bytes(v ^ mask[i % 4] for i, v in enumerate(data)))
 
+    def test_multipart_send_is_one_final_binary_frame(self):
+        ws, client = self.pair()
+        header, payload = struct.pack("!BII", 1, 42, 7), bytearray(b"\x12\x34" * 320)
+        view = memoryview(payload)
+        self.addCleanup(view.release)
+        ws.send((header, view))
+        first, second = exact(client, 2)
+        self.assertEqual(first, 0x82)  # FIN=1, binary; not two fragmented frames.
+        self.assertEqual(second, 126)
+        length = struct.unpack("!H", exact(client, 2))[0]
+        self.assertEqual(length, len(header) + len(payload))
+        self.assertEqual(exact(client, length), header + payload)
+
+    def test_multipart_writes_reuse_original_payload_across_recipients(self):
+        backing = bytearray(b"__audio payload__")
+        payload = memoryview(backing)[2:-2]
+        self.addCleanup(payload.release)
+        header = b"header"
+        for _ in range(2):
+            ws, client = self.pair()
+            real, objects = ws._sock, []
+            class ObservedSocket:
+                def __init__(self, transport, records):
+                    self.transport, self.records = transport, records
+                def __getattr__(self, name): return getattr(self.transport, name)
+                def send(self, data):
+                    self.records.append(data.obj)
+                    return self.transport.send(data)
+            ws._sock = ObservedSocket(real, objects)
+            ws.send((header, payload))
+            self.assertEqual(read_frame(client), (2, header + bytes(payload)))
+            self.assertTrue(any(obj is backing for obj in objects))
+            self.assertTrue(any(obj is header for obj in objects))
+
+    def test_multipart_handles_partial_socket_writes(self):
+        ws, client = self.pair()
+        real = ws._sock
+        class PartialSocket:
+            def __getattr__(self, name): return getattr(real, name)
+            def send(self, data): return real.send(data[:3])
+        ws._sock = PartialSocket()
+        ws.send([b"header", memoryview(b"payload"), bytearray(b"tail")])
+        self.assertEqual(read_frame(client), (2, b"headerpayloadtail"))
+
+    def test_multipart_extended_lengths_and_empty_parts(self):
+        for size in (0, 125, 126, 65535, 65536):
+            ws, client = self.pair()
+            payload = b"x" * size
+            errors = []
+            def send():
+                try: ws.send([b"", payload[:size // 2], memoryview(payload)[size // 2:], b""])
+                except Exception as error: errors.append(error)
+            worker = threading.Thread(target=send)
+            worker.start()
+            self.assertEqual(read_frame(client), (2, payload))
+            worker.join(3)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(errors, [])
+        ws, client = self.pair()
+        ws.send(())
+        self.assertEqual(read_frame(client), (2, b""))
+
+    def test_multipart_validation_happens_before_any_bytes_are_sent(self):
+        ws, client = self.pair(max_bytes=8)
+        for data, error in [((b"ok", "text"), TypeError), ((b"12345", b"6789"), ValueError),
+                            ([b""] * 257, ValueError), ((memoryview(b"abcdef")[::2],), TypeError),
+                            (iter([b"payload"]), TypeError)]:
+            with self.subTest(data=type(data).__name__):
+                with self.assertRaises(error): ws.send(data)
+        client.settimeout(0.05)
+        with self.assertRaises(socket.timeout): client.recv(1)
+        ws.send((b"fine", b"good"))
+        self.assertEqual(read_frame(client), (2, b"finegood"))
+
+    def test_concurrent_multipart_sends_cannot_interleave_messages(self):
+        ws, client = self.pair()
+        errors = []
+        def send(prefix):
+            try:
+                for _ in range(10): ws.send((prefix, b"payload", prefix))
+            except Exception as error: errors.append(error)
+        workers = [threading.Thread(target=send, args=(prefix,)) for prefix in (b"A", b"B")]
+        for worker in workers: worker.start()
+        messages = [read_frame(client) for _ in range(20)]
+        for worker in workers:
+            worker.join(3)
+            self.assertFalse(worker.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(messages.count((2, b"ApayloadA")), 10)
+        self.assertEqual(messages.count((2, b"BpayloadB")), 10)
+
+    def test_recv_preserves_empty_messages_and_raises_after_buffered_messages(self):
+        ws, client = self.pair()
+        client.sendall(frame(1, b"") + frame(2, b"") + frame(8, struct.pack("!H", 1000)))
+        self.assertEqual(ws.recv(), "")
+        self.assertEqual(ws.recv(), b"")
+        with self.assertRaisesRegex(ConnectionError, "WebSocket closed"): ws.recv()
+        self.assertIsNone(ws.receive())
+
+    def test_multipart_failure_after_header_closes_connection(self):
+        ws, client = self.pair()
+        real = ws._sock
+        class FailingSocket:
+            calls = 0
+            def __getattr__(self, name): return getattr(real, name)
+            def send(self, data):
+                self.calls += 1
+                if self.calls > 1: raise ConnectionResetError("fixture lost peer")
+                return real.send(data)
+        ws._sock = FailingSocket()
+        with self.assertRaises(ConnectionResetError): ws.send((b"header", b"payload"))
+        self.assertTrue(ws.closed)
+
+    def test_partial_payload_failure_releases_exported_buffer_views(self):
+        ws, client = self.pair()
+        real, payload = ws._sock, bytearray(b"audio")
+        class FailingPartialSocket:
+            calls = 0
+            def __getattr__(self, name): return getattr(real, name)
+            def send(self, data):
+                self.calls += 1
+                if self.calls > 2: raise ConnectionResetError("fixture partial payload failure")
+                return real.send(data[:1] if self.calls == 2 else data)
+        ws._sock = FailingPartialSocket()
+        saved_error = None
+        try:
+            ws.send((payload,))
+        except ConnectionResetError as error:
+            saved_error = error
+        self.assertIsNotNone(saved_error)
+        # A retained exception traceback must not leave our internal memoryviews
+        # pinning mutable input after send has returned/raised.
+        payload.extend(b" resized")
+        self.assertTrue(ws.closed)
+
     def test_byte_queue_defaults_to_four_max_messages(self):
         ws, client = self.pair(max_bytes=2)
         client.sendall(frame(2, b"ab") * 5)

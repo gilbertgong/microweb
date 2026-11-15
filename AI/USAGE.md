@@ -110,3 +110,8 @@ max_queue_bytes for tolerable backlog, rather than leaving a multi-MiB generic q
 as an independent object-count ceiling. See the format-specific arithmetic in docs/websockets.md.
 TLS-terminated apps should use explicit route origins; do not bypass all origin checks or assume
 forwarded headers are trusted.
+
+Relays can call ws.send((header, payload_memoryview)) without joining PCM payload buffers. Keep all
+backing data stable until synchronous send returns; prevalidate application headers separately. Use
+ws.recv() when ConnectionError on disconnect fits a helper, or receive()/iteration for normal closure
+without exceptions. Neither naming nor tuple support implies complete websockets-package compatibility.
