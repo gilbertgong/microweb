@@ -58,6 +58,23 @@ Origin-bearing mutation requests must match the HTTP Host by default; `same_orig
 disables that check. This local HTTP server has no authentication, TLS, proxy handling, or public
 deployment support. Bind to loopback for the intended desktop use.
 
+## WebSockets
+
+WebSocket routes share the HTTP server and need no extra packages:
+
+```python
+@app.websocket("/events")
+def events(ws):
+    for message in ws:
+        ws.send(message)
+```
+
+Text and binary messages, incoming fragmentation, ping/pong, keepalive and connection cleanup are handled
+automatically. Defaults bound messages to 1 MiB and the incoming queue to 16 messages. Each connection
+uses its application request thread plus one protocol reader thread. Heartbeat timings are configurable.
+Run `python examples/websocket_echo.py` for a mounted browser demo, or read
+[WebSocket usage and limits](docs/websockets.md) for the API, lifecycle and supported protocol features.
+
 ## Optional console
 
 For several apps sharing navigation, an optional shell is included in the same file.

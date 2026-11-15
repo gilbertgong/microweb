@@ -97,3 +97,10 @@ asset bytes fail without replacement. An existing draft must be explicitly publi
 Do not bump again just to recover a publishing failure. No --push means no gh/network/publishing calls.
 Verify publishing code with mocked commands and disposable repositories; never test against a real
 remote without the user's explicit authorization to publish that release.
+
+## Check WebSocket use
+
+Use docs/websockets.md for the route API and limits. Run python examples/websocket_echo.py --port 8769
+and open the printed loopback URL. Verify both a short message and Send 500 KB; Reconnect is explicit.
+No packages or models are required. A browser supplies protocol pong replies automatically; test
+keepalive and malformed peers with tests/test_websockets.py rather than modifying a live application.

@@ -233,3 +233,21 @@ copies can be restored; already matching copies are skipped and newer installed 
 All 67 tests pass on Python 3.12/Git Bash and Python 3.14/MSYS2, including edited-copy backups,
 same-version refresh and CLI dispatch. No real file was upgraded as part of verification. The runtime
 change is not yet released; existing published versions still contain their previous updater behavior.
+
+## 2026-11-14 — Optional WebSocket transport
+
+User authorized a feature branch after reviewing a compact implementation. Retained the single-file,
+standard-library design; added mounted WebSocket routes, text/binary messages, bounded incoming
+fragmentation and queueing, protocol validation and bounded closing/shutdown. Rejecting fragmented
+browser messages was unsuitable; small outgoing messages can remain unfragmented. Automatic protocol
+handling uses one reader thread in addition to the existing application request thread per connection,
+as agreed with the user. Keepalive defaults to 20-second ping/pong timings, can be disabled, and shares
+the reader instead of adding timer threads. Application reconnection/retry remains explicit.
+No compression, extension or subprotocol negotiation was added. The echo example covers a mounted
+endpoint and a 500 KB browser message. Work is isolated from the main checkout and running consumers.
+
+Validation: 92 tests on Python 3.12; Python 3.14/MSYS2 full 91-test suite before the final duplicate-header
+check, then all 25 WebSocket tests with that check. Independent Node WebSocket client verifies text,
+binary, 500 KB, empty messages, automatic heartbeat beyond 20 seconds and clean close. Browser automation
+was disabled in Work settings; no browser UI check is claimed. JavaScript syntax and whitespace checks
+pass. No dependency installation, version bump, release, push or change to running consumer copies.
