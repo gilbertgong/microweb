@@ -292,3 +292,18 @@ At the user's request, made the vendored unmasking docstring application-neutral
 WebSocket guide now explicitly describe the independent, intentionally cut-down implementation as
 not fully RFC 6455 compliant and not suitable for every use case. PCM context remains in user docs
 to explain the motivation and help consumers judge suitability. No runtime behavior changed.
+
+
+## 2026-11-14 — Reduce WebSocket receive copies
+
+Complete socket reads now bypass accumulation when no buffered prefix exists; buffered snapshots
+use a memoryview instead of allocating a bytearray slice. Single-frame messages skip fragment
+assembly; binary delivery reuses the unmasked payload, while text retains UTF-8 validation.
+Fragmented messages retain reassembly. Bulk unmasking, public API, size/queue accounting,
+heartbeat and two-thread connection ownership are unchanged.
+
+Added three regressions for buffer identity/leftovers and unfragmented receive identity. All
+115 offline tests pass on Python 3.12.10 and Python 3.14.5/MSYS2, including 48 WebSocket tests. Added reproducible
+scripts/benchmark_ws_receive.py and AI/WS_RECEIVE_COPIES.md: local complete-frame parser CPU
+measurements improved roughly 21–36%, with small absolute savings and no end-to-end claim.
+No version bump, manifest update, release or changes to consumer copies.

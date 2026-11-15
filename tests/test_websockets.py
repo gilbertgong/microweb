@@ -153,6 +153,35 @@ class HandshakeTests(unittest.TestCase):
         self.assertEqual(self.app.handle("GET", "/none", headers=values)[0], 403)
 
 
+class ReceiveCopyTests(unittest.TestCase):
+    def test_complete_read_reuses_socket_bytes(self):
+        payload = bytes(range(251)) * 3
+        class Socket:
+            def recv(self, size):
+                assert size == len(payload)
+                return payload
+        ws = WebSocket.__new__(WebSocket)
+        ws._buffer, ws.timeout, ws._sock = bytearray(), 1, Socket()
+        ws._wait = lambda **kwargs: None
+        self.assertIs(ws._read_exact(len(payload)), payload)
+        self.assertEqual(ws._buffer, b"")
+
+    def test_partial_and_buffered_reads_preserve_leftovers(self):
+        class Socket:
+            def __init__(self): self.chunks = iter([b"ab", b"cde"])
+            def recv(self, size): return next(self.chunks)
+        ws = WebSocket.__new__(WebSocket)
+        ws._buffer, ws.timeout, ws._sock = bytearray(), 1, Socket()
+        ws._wait = lambda **kwargs: None
+        self.assertEqual(ws._read_exact(5), b"abcde")
+        ws._buffer.extend(b"headerpayload")
+        self.assertEqual(ws._read_exact(6), b"header")
+        self.assertEqual(ws._buffer, b"payload")
+        self.assertEqual(ws._read_exact(0), b"")
+        self.assertEqual(ws._read_exact(7), b"payload")
+        ws._buffer.extend(b"still resizable")
+
+
 class TransportTests(unittest.TestCase):
     def pair(self, **kw):
         server, client = socket.socketpair()
@@ -161,6 +190,24 @@ class TransportTests(unittest.TestCase):
         self.addCleanup(client.close)
         self.addCleanup(ws._abort)
         return ws, client
+
+    def test_unfragmented_receive_reuses_unmasked_payload(self):
+        for size in (1, 521, 1545, 65536):
+            observed = []
+            def unmask(payload, mask):
+                result = _ws_unmask(payload, mask)
+                observed.append(result)
+                return result
+            with patch("microweb._ws_unmask", side_effect=unmask):
+                ws, client = self.pair(ping_interval=None)
+                payload = b"x" * size
+                worker = threading.Thread(target=client.sendall, args=(frame(2, payload),))
+                worker.start()
+                message = ws.receive()
+                worker.join(3)
+                self.assertFalse(worker.is_alive())
+                self.assertEqual(message, payload)
+                self.assertIs(message, observed[0])
 
     def test_text_binary_and_all_length_encodings(self):
         for payload in (b"", b"hello", b"x" * 126, b"x" * 65536):
