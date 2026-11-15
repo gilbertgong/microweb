@@ -97,3 +97,21 @@ asset bytes fail without replacement. An existing draft must be explicitly publi
 Do not bump again just to recover a publishing failure. No --push means no gh/network/publishing calls.
 Verify publishing code with mocked commands and disposable repositories; never test against a real
 remote without the user's explicit authorization to publish that release.
+
+## Check WebSocket use
+
+Use docs/websockets.md for the route API and limits. Run python examples/websocket_echo.py --port 8769
+and open the printed loopback URL. Verify both a short message and Send 500 KB; Reconnect is explicit.
+No packages or models are required. A browser supplies protocol pong replies automatically; test
+keepalive and malformed peers with tests/test_websockets.py rather than modifying a live application.
+
+For PCM relay routes, configure max_bytes for the largest expected packet/control message and
+max_queue_bytes for tolerable backlog, rather than leaving a multi-MiB generic queue. Keep max_queue
+as an independent object-count ceiling. See the format-specific arithmetic in docs/websockets.md.
+TLS-terminated apps should use explicit route origins; do not bypass all origin checks or assume
+forwarded headers are trusted.
+
+Relays can call ws.send((header, payload_memoryview)) without joining PCM payload buffers. Keep all
+backing data stable until synchronous send returns; prevalidate application headers separately. Use
+ws.recv() when ConnectionError on disconnect fits a helper, or receive()/iteration for normal closure
+without exceptions. Neither naming nor tuple support implies complete websockets-package compatibility.

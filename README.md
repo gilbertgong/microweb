@@ -2,7 +2,7 @@
 
 A Flask-style web server in a single Python file. Copy **`microweb.py`** beside your app and run it.
 Standard library only, with no packages to install. Python 3.10 or newer.
-BSD 2-Clause licensed, including the notice embedded in the file.
+Licensed under BSD 2-Clause, with license text embedded in file.
 
 Save this as `app.py` beside `microweb.py`:
 
@@ -57,6 +57,32 @@ Bodies require Content-Length and default to a 1 MB limit; `req.body(max_bytes=.
 Origin-bearing mutation requests must match the HTTP Host by default; `same_origin=False`
 disables that check. This local HTTP server has no authentication, TLS, proxy handling, or public
 deployment support. Bind to loopback for the intended desktop use.
+
+## WebSockets
+
+WebSocket support is an independent, intentionally cut-down implementation. It is **not fully RFC 6455
+compliant** and is not suitable for all WebSocket use cases. Its scope is shaped by local dashboards and
+low-latency PCM relays; review the [supported features and limits](docs/websockets.md) before adopting it
+for another application.
+
+WebSocket routes share the HTTP server and need no extra packages:
+
+```python
+@app.websocket("/events")
+def events(ws):
+    for message in ws:
+        ws.send(message)
+```
+
+Text and binary messages, incoming fragmentation, ping/pong, keepalive and connection cleanup are handled
+automatically. Defaults bound messages to 1 MiB and queued payload to four times that limit, with a
+256-message ceiling for object overhead. Audio routes can configure a smaller byte budget for latency.
+Each connection
+uses its application request thread plus one protocol reader thread. Heartbeat timings are configurable.
+`ws.send((header, payload))` sends binary buffers as one message without joining the payload in Python.
+`ws.recv()` offers exception-on-closure naming alongside the `None`-returning `ws.receive()`.
+Run `python examples/websocket_echo.py` for a mounted browser demo, or read
+[WebSocket usage and limits](docs/websockets.md) for the API, lifecycle and supported protocol features.
 
 ## Optional console
 

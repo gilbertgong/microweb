@@ -51,7 +51,9 @@ around those apps. No shell, update checks, or server starts on import.
 
 import argparse
 import ast
+import base64
 import copy
+from collections import deque
 import errno
 import hashlib
 import html
@@ -61,9 +63,12 @@ import json
 import logging
 import os
 import re
+import select
 import socket
+import struct
 import tempfile
 import threading
+import time
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -218,6 +223,8 @@ class _Server(ThreadingHTTPServer):
     def __init__(self, *args, **kwargs):
         self._requests = threading.Condition()
         self._active = 0
+        self._websockets = set()
+        self._stopping = False
         super().__init__(*args, **kwargs)
 
     def process_request(self, request, client_address):
@@ -249,10 +256,379 @@ class _Server(ThreadingHTTPServer):
                 except KeyboardInterrupt:
                     log.warning("Waiting for active HTTP requests before stopping components")
 
+    def stop_websockets(self):
+        with self._requests:
+            self._stopping = True
+            connections = list(self._websockets)
+        for connection in connections:
+            connection.close(1001, "server stopping", timeout=0.2)
+
     def server_bind(self):
         if os.name == "nt":
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         super().server_bind()
+
+
+# Optional WebSocket transport -----------------------------------------------
+
+_WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+_WS_MAX_PARTS = 256
+
+
+class _WebSocketError(Exception):
+    def __init__(self, code, reason):
+        self.code, self.reason = code, reason
+
+
+def _ws_close_code(code):
+    return type(code) is int and (code in (1000, 1001, 1002, 1003, 1007, 1008,
+                                           1009, 1010, 1011, 1012, 1013, 1014)
+                                 or 3000 <= code <= 4999)
+
+
+def _ws_unmask(payload, mask):
+    """Apply the WebSocket frame mask using bulk integer XOR."""
+    size = len(payload)
+    repeated = (mask * ((size + 3) // 4))[:size]
+    return (int.from_bytes(payload, "little") ^ int.from_bytes(repeated, "little")).to_bytes(size, "little")
+
+
+class WebSocket:
+    """One upgraded connection. receive() returns str/bytes, or None after closure.
+
+    Applications normally use this through @app.websocket, not its constructor.
+    Sends may come from other threads; only one receiver is allowed at a time.
+    No compression/extensions, automatic reconnect, or application broadcast queue.
+    """
+
+    def __init__(self, sock, req, *, initial=b"", max_bytes=1048576, timeout=10,
+                 ping_interval=20, ping_timeout=20, max_queue=256, max_queue_bytes=None):
+        self.req, self.max_bytes, self.timeout = req, max_bytes, timeout
+        self._ping_interval, self._ping_timeout, self._max_queue = ping_interval, ping_timeout, max_queue
+        self._max_queue_bytes = 4 * max_bytes if max_queue_bytes is None else max_queue_bytes
+        self._queued_bytes, self._message_bytes = 0, 0
+        self._next_ping = time.monotonic() + ping_interval if ping_interval is not None else None
+        self._pending_ping = None
+        self._messages, self._incoming = deque(), threading.Condition()
+        self._sock, self._buffer = sock, bytearray(initial)
+        self._send_lock, self._receive_lock = threading.Lock(), threading.Lock()
+        self._closed = threading.Event()
+        self._close_sent = False
+        self._close_deadline = None
+        self._fragment_opcode, self._fragment = None, bytearray()
+        self.close_code, self.close_reason = None, ""
+        sock.setblocking(False)
+        self._reader_thread = threading.Thread(target=self._read_loop, name="microweb websocket", daemon=True)
+        self._reader_thread.start()
+
+    @property
+    def closed(self):
+        return self._closed.is_set()
+
+    def _abort(self, code=1006, reason=""):
+        if self.closed:
+            return
+        self.close_code, self.close_reason = code, reason
+        self._closed.set()
+        with self._incoming:
+            self._incoming.notify_all()
+        # Discard already-arrived input before closing: unread TCP data can
+        # otherwise turn the best-effort close frame into an immediate reset.
+        try:
+            remaining = 65536
+            while remaining:
+                chunk = self._sock.recv(min(4096, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+        except OSError:
+            pass
+        try:
+            self._sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        self._sock.close()
+
+    def _wait(self, writing=False, deadline=None):
+        while not self.closed:
+            if not writing and not self._close_sent:
+                self._heartbeat()
+            end = deadline
+            if self._close_deadline is not None:
+                end = min(end, self._close_deadline) if end is not None else self._close_deadline
+            remaining = 0.2 if end is None else min(0.2, end - time.monotonic())
+            if remaining <= 0:
+                raise TimeoutError("WebSocket I/O timed out")
+            try:
+                readable, writable, _ = select.select(
+                    [] if writing else [self._sock], [self._sock] if writing else [], [], remaining)
+            except (OSError, ValueError) as error:
+                raise ConnectionError("WebSocket closed") from error
+            if readable or writable:
+                return
+        raise ConnectionError("WebSocket closed")
+
+    def _heartbeat(self):
+        now = time.monotonic()
+        if self._pending_ping is not None:
+            if self._ping_timeout is not None and now - self._pending_ping[1] >= self._ping_timeout:
+                raise _WebSocketError(1011, "keepalive pong timed out")
+            if self._ping_timeout is not None:
+                return
+        if self._next_ping is not None and now >= self._next_ping:
+            token = os.urandom(8)
+            self._pending_ping = (token, now)
+            self._next_ping = now + self._ping_interval
+            self._frame(9, token)
+
+    def _read_exact(self, size, *, idle=False):
+        # Keep bytes across waits. An idle connection has no deadline; once a
+        # frame starts, a stalled peer gets a bounded I/O deadline.
+        deadline = None if idle and not self._buffer else time.monotonic() + self.timeout
+        while len(self._buffer) < size:
+            self._wait(deadline=deadline)
+            try:
+                chunk = self._sock.recv(min(65536, size - len(self._buffer)))
+            except (BlockingIOError, InterruptedError):
+                continue
+            if not chunk:
+                raise ConnectionError("WebSocket EOF")
+            self._buffer.extend(chunk)
+            if deadline is None:
+                deadline = time.monotonic() + self.timeout
+        result = bytes(self._buffer[:size])
+        del self._buffer[:size]
+        return result
+
+    def _frame(self, opcode, payload, timeout=None, *, closing=False):
+        parts = payload if isinstance(payload, tuple) else (memoryview(payload),)
+        length = sum(part.nbytes for part in parts)
+        timeout = self.timeout if timeout is None else timeout
+        deadline = time.monotonic() + timeout
+        if not self._send_lock.acquire(timeout=max(0, timeout)):
+            raise TimeoutError("WebSocket sender busy")
+        data = None
+        try:
+            if self.closed or (self._close_sent and not closing):
+                raise ConnectionError("WebSocket is closing")
+            if opcode == 8 and self._close_sent:
+                return
+            header = (struct.pack("!BB", 0x80 | opcode, length) if length < 126 else
+                      struct.pack("!BBH", 0x80 | opcode, 126, length) if length < 65536 else
+                      struct.pack("!BBQ", 0x80 | opcode, 127, length))
+            # One frame, multiple writes. Never concatenate the application
+            # payload; the send lock and deadline cover every part together.
+            for part in (memoryview(header),) + parts:
+                data = part
+                while data:
+                    self._wait(writing=True, deadline=deadline)
+                    try:
+                        sent = self._sock.send(data)
+                    except (BlockingIOError, InterruptedError):
+                        continue
+                    if not sent:
+                        raise ConnectionError("WebSocket EOF")
+                    data = data[sent:]
+            if opcode == 8:
+                self._close_sent = True
+        except OSError:
+            self._abort()
+            raise
+        finally:
+            if data is not None:
+                data.release()
+            self._send_lock.release()
+
+    def send(self, data):
+        """Send one message, optionally from a list/tuple of binary buffers.
+
+        Binary buffers aren't copied or joined: keep their contents unchanged
+        until send returns. Non-contiguous memoryviews aren't supported.
+        """
+        if isinstance(data, str):
+            opcode, values = 1, (data.encode("utf-8"),)
+        elif isinstance(data, (bytes, bytearray, memoryview)):
+            opcode, values = 2, (data,)
+        elif isinstance(data, (list, tuple)):
+            values = tuple(data)
+            if len(values) > _WS_MAX_PARTS:
+                raise ValueError(f"WebSocket.send accepts at most {_WS_MAX_PARTS} buffers")
+            opcode = 2
+        else:
+            raise TypeError("WebSocket.send expects str, bytes, or a list/tuple of binary buffers")
+        parts, length = [], 0
+        try:
+            for value in values:
+                if not isinstance(value, (bytes, bytearray, memoryview)):
+                    raise TypeError("WebSocket.send parts must be binary buffers")
+                try:
+                    view = memoryview(value).cast("B")
+                except (TypeError, ValueError):
+                    raise TypeError("WebSocket.send requires contiguous binary buffers") from None
+                parts.append(view)
+                length += view.nbytes
+                if length > self.max_bytes:
+                    raise ValueError("WebSocket message exceeds max_bytes")
+            self._frame(opcode, tuple(parts))
+        finally:
+            for part in parts:
+                part.release()
+
+    def ping(self, payload=b""):
+        if not isinstance(payload, (bytes, bytearray, memoryview)):
+            raise TypeError("ping payload must be bytes")
+        if len(payload) > 125:
+            raise ValueError("ping payload exceeds 125 bytes")
+        self._frame(9, bytes(payload))
+
+    def _next_message(self):
+        while not self.closed:
+            first, second = self._read_exact(2, idle=True)
+            fin, opcode, length = bool(first & 128), first & 15, second & 127
+            control = opcode >= 8
+            if first & 112 or not second & 128 or opcode not in (0, 1, 2, 8, 9, 10):
+                raise _WebSocketError(1002, "invalid frame")
+            if control and (not fin or length > 125):
+                raise _WebSocketError(1002, "invalid control frame")
+            if length == 126:
+                length = struct.unpack("!H", self._read_exact(2))[0]
+                if length < 126:
+                    raise _WebSocketError(1002, "non-minimal length")
+            elif length == 127:
+                length = struct.unpack("!Q", self._read_exact(8))[0]
+                if length < 65536 or length & (1 << 63):
+                    raise _WebSocketError(1002, "invalid length")
+            if not control:
+                if (opcode == 0) != (self._fragment_opcode is not None):
+                    raise _WebSocketError(1002, "invalid continuation")
+                if length + len(self._fragment) > self.max_bytes:
+                    raise _WebSocketError(1009, "message too large")
+            mask = self._read_exact(4)
+            payload = _ws_unmask(self._read_exact(length), mask)
+            if opcode == 8:
+                if len(payload) == 1:
+                    raise _WebSocketError(1002, "invalid close payload")
+                code = struct.unpack("!H", payload[:2])[0] if payload else 1005
+                if payload and not _ws_close_code(code):
+                    raise _WebSocketError(1002, "invalid close code")
+                try:
+                    reason = payload[2:].decode("utf-8")
+                except UnicodeDecodeError:
+                    raise _WebSocketError(1007, "invalid close reason") from None
+                if not self._close_sent:
+                    self._frame(8, payload, timeout=1, closing=True)
+                self._abort(code, reason)
+                return None
+            if opcode == 9:
+                self._frame(10, payload, closing=True)
+                continue
+            if opcode == 10:
+                if self._pending_ping is not None and payload == self._pending_ping[0]:
+                    self._pending_ping = None
+                continue
+            if self._close_sent:
+                continue
+            if opcode in (1, 2):
+                self._fragment_opcode = opcode
+            self._fragment.extend(payload)
+            if not fin:
+                continue
+            opcode, message = self._fragment_opcode, bytes(self._fragment)
+            self._fragment_opcode, self._fragment = None, bytearray()
+            self._message_bytes = len(message)
+            if opcode == 1:
+                try:
+                    return message.decode("utf-8")
+                except UnicodeDecodeError:
+                    raise _WebSocketError(1007, "invalid text") from None
+            return message
+        return None
+
+    def _read_loop(self):
+        try:
+            while not self.closed:
+                message = self._next_message()
+                if message is None:
+                    break
+                with self._incoming:
+                    if len(self._messages) >= self._max_queue:
+                        raise _WebSocketError(1013, "incoming message queue full")
+                    if self._queued_bytes + self._message_bytes > self._max_queue_bytes:
+                        raise _WebSocketError(1013, "incoming byte queue full")
+                    self._messages.append((message, self._message_bytes))
+                    self._queued_bytes += self._message_bytes
+                    self._incoming.notify()
+        except _WebSocketError as error:
+            try:
+                self._frame(8, struct.pack("!H", error.code), timeout=1, closing=True)
+            except OSError:
+                pass
+            self._abort(error.code, error.reason)
+        except OSError:
+            self._abort()
+        except Exception:
+            log.exception("WebSocket reader failed")
+            self._abort(1011, "reader failed")
+        finally:
+            if not self.closed:
+                self._abort()
+
+    def receive(self):
+        """Wait for a complete message; return None after queued messages and closure."""
+        if not self._receive_lock.acquire(blocking=False):
+            raise RuntimeError("WebSocket permits only one receiver")
+        try:
+            with self._incoming:
+                while not self._messages and not self.closed:
+                    self._incoming.wait()
+                if not self._messages:
+                    return None
+                message, size = self._messages.popleft()
+                self._queued_bytes -= size
+                return message
+        finally:
+            self._receive_lock.release()
+
+    def recv(self):
+        """receive() convenience variant that raises ConnectionError on closure."""
+        message = self.receive()
+        if message is None:
+            raise ConnectionError("WebSocket closed")
+        return message
+
+    def close(self, code=1000, reason="", *, timeout=1):
+        """Bounded closing handshake. Safe to call repeatedly or from another thread."""
+        if not _ws_close_code(code) or code == 1010:
+            raise ValueError("invalid server close code")
+        reason_bytes = reason.encode("utf-8")
+        if len(reason_bytes) > 123:
+            raise ValueError("close reason exceeds 123 UTF-8 bytes")
+        if self.closed:
+            return
+        self._close_deadline = time.monotonic() + timeout
+        try:
+            if not self._close_sent:
+                self._frame(8, struct.pack("!H", code) + reason_bytes, timeout=timeout, closing=True)
+            self._closed.wait(max(0, self._close_deadline - time.monotonic()))
+        except (OSError, _WebSocketError):
+            pass
+        finally:
+            self._abort(code, reason)
+            if threading.current_thread() is not self._reader_thread:
+                self._reader_thread.join(timeout=1)
+
+    def __iter__(self):
+        while True:
+            message = self.receive()
+            if message is None:
+                return
+            yield message
+
+
+class _WebSocketUpgrade:
+    def __init__(self, req, handler, options):
+        self.req, self.handler = req, handler
+        self.options = options
 
 
 # Responses and large files ---------------------------------------------------
@@ -322,6 +698,7 @@ class App:
         self.static_dir = Path(static_dir).resolve() if static_dir else None
         self.max_body = max_body
         self.routes = {}  # path -> {method: handler}
+        self.websocket_routes = {}
         self.mounts = {}
         self.same_origin = same_origin
         self.components = []
@@ -340,6 +717,45 @@ class App:
 
     def post(self, path):
         return self.route(path, ["POST"])
+
+    def websocket(self, path, *, max_bytes=1048576, timeout=10,
+                  ping_interval=20, ping_timeout=20, max_queue=256, max_queue_bytes=None,
+                  origins=None):
+        """Register handler(ws); timeout bounds I/O stalls, not idle receive time."""
+        if type(max_bytes) is not int or max_bytes <= 0:
+            raise ValueError("max_bytes must be a positive integer")
+        for name, value in (("timeout", timeout), ("ping_interval", ping_interval), ("ping_timeout", ping_timeout)):
+            if value is None and name != "timeout":
+                continue
+            if type(value) not in (int, float) or not 0 < value < float("inf"):
+                raise ValueError(f"{name} must be positive and finite")
+        if type(max_queue) is not int or max_queue <= 0:
+            raise ValueError("max_queue must be a positive integer")
+        if max_queue_bytes is not None and (type(max_queue_bytes) is not int or max_queue_bytes <= 0):
+            raise ValueError("max_queue_bytes must be a positive integer or None")
+        allowed_origins = None
+        if origins is not None:
+            if isinstance(origins, (str, bytes)):
+                raise ValueError("origins must be a collection of origins, not a string")
+            allowed_origins = frozenset(origins)
+            for origin in allowed_origins:
+                if origin is None:
+                    continue
+                if not isinstance(origin, str):
+                    raise ValueError("origins entries must be HTTP(S) origins or None")
+                parsed = urllib.parse.urlsplit(origin)
+                if (parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username is not None
+                        or parsed.password is not None or parsed.path or parsed.query or parsed.fragment):
+                    raise ValueError("origins entries must be HTTP(S) origins without a path")
+                parsed.port  # validate port syntax/range at registration, not during requests
+        def register(handler):
+            if path in self.websocket_routes:
+                raise ValueError("duplicate WebSocket route")
+            self.websocket_routes[path] = (handler, dict(max_bytes=max_bytes, timeout=timeout,
+                ping_interval=ping_interval, ping_timeout=ping_timeout, max_queue=max_queue,
+                max_queue_bytes=max_queue_bytes), allowed_origins)
+            return handler
+        return register
 
     def mount(self, prefix, app):
         """Mount an app on a path boundary; longest matching prefix wins."""
@@ -389,6 +805,7 @@ class App:
             # Stop admission first; existing request threads retain their sockets.
             try:
                 server.socket.close()
+                server.stop_websockets()
                 server.drain_requests()
             except BaseException as error:
                 if primary is None:
@@ -420,6 +837,9 @@ class App:
             message["Content-Length"] = str(len(body))
         req = Request(method, path, message, io.BytesIO(body), "test", self.max_body)
         status, response_headers, data = self._dispatch(req)
+        if isinstance(data, _WebSocketUpgrade):
+            # The offline helper validates the handshake but has no transport.
+            data = b""
         if isinstance(data, Stream):
             data = b"".join(data) if method != "HEAD" else b""
         if method == "HEAD":
@@ -431,6 +851,8 @@ class App:
     def _dispatch(self, req):
         """Route a request; returns (status, [(header, value)], body bytes)."""
         try:
+            if req.path in self.websocket_routes and (req.headers.get("Upgrade") or req.path not in self.routes):
+                return self._websocket_handshake(req)
             if self.same_origin and req.method not in ("GET", "HEAD", "OPTIONS"):
                 origin = req.headers.get("Origin")
                 if origin and origin != "http://" + req.headers.get("Host", ""):
@@ -468,6 +890,37 @@ class App:
         except Exception:
             log.exception("%s %s failed", req.method, req.path)
             return self._json(500, {"error": "internal error"})
+
+    def _websocket_handshake(self, req):
+        tokens = lambda name: {v.strip().lower() for v in req.headers.get(name, "").split(",")}
+        if any(len(req.headers.get_all(name, [])) > 1
+               for name in ("Host", "Origin", "Sec-WebSocket-Key", "Sec-WebSocket-Version")):
+            raise HTTPError(400, "duplicate WebSocket handshake header")
+        if req.method != "GET":
+            return self._response(Response("WebSocket requires GET", 405, headers={"Allow": "GET"}))
+        if req.headers.get("Sec-WebSocket-Version") != "13":
+            return self._response(Response("WebSocket version 13 required", 426,
+                                           headers={"Sec-WebSocket-Version": "13"}))
+        if ("websocket" not in tokens("Upgrade") or "upgrade" not in tokens("Connection")
+                or not req.headers.get("Host") or getattr(req, "_http_version", "HTTP/1.1") != "HTTP/1.1"
+                or "Transfer-Encoding" in req.headers or req.headers.get("Content-Length", "0") != "0"):
+            raise HTTPError(400, "invalid WebSocket upgrade")
+        handler, options, allowed_origins = self.websocket_routes[req.path]
+        origin = req.headers.get("Origin")
+        if allowed_origins is not None:
+            if origin not in allowed_origins:
+                raise HTTPError(403, "WebSocket origin not allowed")
+        elif self.same_origin and origin and origin != "http://" + req.headers.get("Host", ""):
+            raise HTTPError(403, "cross-origin WebSocket refused")
+        try:
+            key = req.headers.get("Sec-WebSocket-Key", "")
+            if len(base64.b64decode(key, validate=True)) != 16:
+                raise ValueError
+        except (ValueError, UnicodeError):
+            raise HTTPError(400, "invalid WebSocket key") from None
+        accept = base64.b64encode(hashlib.sha1((key + _WS_GUID).encode("ascii")).digest()).decode("ascii")
+        return 101, [("Upgrade", "websocket"), ("Connection", "Upgrade"),
+                     ("Sec-WebSocket-Accept", accept)], _WebSocketUpgrade(req, handler, options)
 
     def _response(self, result):
         if isinstance(result, Response):
@@ -515,7 +968,11 @@ class App:
             def _serve(self):
                 req = Request(self.command, self.path, self.headers, self.rfile,
                               self.client_address[0], app.max_body)
+                req._http_version = self.request_version
                 status, headers, body = app._dispatch(req)
+                if isinstance(body, _WebSocketUpgrade):
+                    self._serve_websocket(headers, body)
+                    return
                 streaming = isinstance(body, Stream)
                 try:
                     self.send_response(status)
@@ -541,6 +998,43 @@ class App:
                 except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                     self.close_connection = True
                     log.debug("%s %s: client disconnected", req.method, req.path)
+
+            def _serve_websocket(self, headers, upgrade):
+                self.close_connection = True
+                ws = None
+                try:
+                    self.protocol_version = "HTTP/1.1"
+                    self.send_response(101)
+                    for name, value in headers:
+                        self.send_header(name, value)
+                    self.end_headers()
+                    self.wfile.flush()
+                    if self.connection.family in (socket.AF_INET, socket.AF_INET6):
+                        self.connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                    self.connection.setblocking(False)
+                    # Preserve any bytes already buffered by the HTTP reader.
+                    initial = self.rfile.read1(65536)
+                    ws = WebSocket(self.connection, upgrade.req, initial=initial, **upgrade.options)
+                    with self.server._requests:
+                        if self.server._stopping:
+                            ws._abort(1001, "server stopping")
+                            return
+                        self.server._websockets.add(ws)
+                    try:
+                        upgrade.handler(ws)
+                    except OSError:
+                        ws._abort()
+                    except Exception:
+                        log.exception("WebSocket %s failed", self.path)
+                        ws.close(1011, "handler failed")
+                except OSError:
+                    if ws:
+                        ws._abort()
+                finally:
+                    if ws:
+                        ws.close()
+                        with self.server._requests:
+                            self.server._websockets.discard(ws)
 
             do_GET = do_HEAD = do_POST = do_PUT = do_PATCH = do_DELETE = _serve
 

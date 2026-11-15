@@ -9,6 +9,9 @@ linked names, including banners. Descriptions are optional display metadata. App
 
 ## Working preferences
 
+- Keep WebSocket handling automatic: two threads per connection (application handler and protocol reader),
+  with ping/pong and heartbeat in that same reader. Bound queued messages and make heartbeat configurable.
+  *Why:* the user agreed to two threads and wants protocol details kept out of normal application code.
 - Keep README aimed at users of the framework: usage, API, examples and updates. Put repository
   maintenance, testing and release/publishing workflows in AI/ rather than README.
   *Why:* the user explicitly wants the README to explain consuming the project, not maintaining it.

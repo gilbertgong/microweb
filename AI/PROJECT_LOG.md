@@ -233,3 +233,62 @@ copies can be restored; already matching copies are skipped and newer installed 
 All 67 tests pass on Python 3.12/Git Bash and Python 3.14/MSYS2, including edited-copy backups,
 same-version refresh and CLI dispatch. No real file was upgraded as part of verification. The runtime
 change is not yet released; existing published versions still contain their previous updater behavior.
+
+## 2026-11-14 — Optional WebSocket transport
+
+User authorized a feature branch after reviewing a compact implementation. Retained the single-file,
+standard-library design; added mounted WebSocket routes, text/binary messages, bounded incoming
+fragmentation and queueing, protocol validation and bounded closing/shutdown. Rejecting fragmented
+browser messages was unsuitable; small outgoing messages can remain unfragmented. Automatic protocol
+handling uses one reader thread in addition to the existing application request thread per connection,
+as agreed with the user. Keepalive defaults to 20-second ping/pong timings, can be disabled, and shares
+the reader instead of adding timer threads. Application reconnection/retry remains explicit.
+No compression, extension or subprotocol negotiation was added. The echo example covers a mounted
+endpoint and a 500 KB browser message. Work is isolated from the main checkout and running consumers.
+
+Validation: 92 tests on Python 3.12; Python 3.14/MSYS2 full 91-test suite before the final duplicate-header
+check, then all 25 WebSocket tests with that check. Independent Node WebSocket client verifies text,
+binary, 500 KB, empty messages, automatic heartbeat beyond 20 seconds and clean close. Browser automation
+was disabled in Work settings; no browser UI check is claimed. JavaScript syntax and whitespace checks
+pass. No dependency installation, version bump, release, push or change to running consumer copies.
+
+## 2026-11-14 — PCM streaming refinements
+
+The user clarified the primary WebSocket workload as L16 PCM in 16–32 ms chunks and authorized review
+follow-ups. Added max_queue_bytes (default four times max_bytes), retained an independently configurable
+256-message ceiling for object overhead/empty messages, and account text as original UTF-8 bytes.
+Dequeue releases the byte budget; overflow remains explicit 1013 closure without silent packet dropping.
+Enabled TCP_NODELAY for upgraded TCP sockets and bulk integer-XOR unmasking. A local microbenchmark at
+640/1536/3072 bytes showed roughly 20–27x lower unmasking time; this is not an end-to-end latency claim.
+Added per-route exact origin allowlists, supporting external HTTPS origins with rewritten backend Host
+without disabling HTTP mutation checks or trusting forwarded headers. Mounted routing was already
+correct and remains covered by wire-level tests. New tests cover byte accounting/reuse, empty messages,
+fragmentation, allowlists, actual TCP_NODELAY, paced 20 ms PCM with a 400 ms consumer pause and bounded
+sustained backlog. Audio-format interpretation and latency/drop policy remain application-owned.
+
+Validation: all 103 tests pass on Python 3.12 and Python 3.14 under MSYS2/UCRT64, including
+36 WebSocket tests. Whitespace checks pass. No consumer copies, application state or jobs changed.
+
+## 2026-11-14 — Multipart binary send and recv convenience
+
+User authorized bounded list/tuple binary-buffer sends and recv() raising ConnectionError on closure,
+while receive() retains its None-returning behavior. Multipart sends are one final binary frame, not
+fragment-per-item compatibility with the websockets package. Prevalidate all parts, contiguity and
+combined max_bytes; snapshot the sequence of references without copying payloads. One lock/deadline
+spans frame header and buffer writes. The existing single-buffer path also avoids payload concatenation.
+Caller buffers must remain unchanged during synchronous send; OS copies are outside this guarantee.
+Release internal views even after partial-write errors; caller views remain reusable across recipients.
+At most 256 parts; no arbitrary generators or mixed text/binary parts. Added wire framing, identity,
+partial write/failure, validation-before-output, concurrency, extended lengths, empty-message and
+retained-exception buffer-lifetime tests. This is limited naming/usage compatibility, not the complete
+websockets API or its exception types.
+
+Validation: all 112 offline tests pass on Python 3.12 and Python 3.14/MSYS2/UCRT64, including
+45 WebSocket tests. Whitespace checks pass. No consumer copies or running services changed.
+
+## 2026-11-14 — Clarify WebSocket scope for consumers
+
+At the user's request, made the vendored unmasking docstring application-neutral. README and the
+WebSocket guide now explicitly describe the independent, intentionally cut-down implementation as
+not fully RFC 6455 compliant and not suitable for every use case. PCM context remains in user docs
+to explain the motivation and help consumers judge suitability. No runtime behavior changed.
