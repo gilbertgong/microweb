@@ -287,7 +287,7 @@ def _ws_close_code(code):
 
 
 def _ws_unmask(payload, mask):
-    """Bulk XOR in C; avoids a Python iteration for each PCM sample byte."""
+    """Apply the WebSocket frame mask using bulk integer XOR."""
     size = len(payload)
     repeated = (mask * ((size + 3) // 4))[:size]
     return (int.from_bytes(payload, "little") ^ int.from_bytes(repeated, "little")).to_bytes(size, "little")

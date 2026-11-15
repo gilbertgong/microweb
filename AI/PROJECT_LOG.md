@@ -285,3 +285,10 @@ websockets API or its exception types.
 
 Validation: all 112 offline tests pass on Python 3.12 and Python 3.14/MSYS2/UCRT64, including
 45 WebSocket tests. Whitespace checks pass. No consumer copies or running services changed.
+
+## 2026-11-14 — Clarify WebSocket scope for consumers
+
+At the user's request, made the vendored unmasking docstring application-neutral. README and the
+WebSocket guide now explicitly describe the independent, intentionally cut-down implementation as
+not fully RFC 6455 compliant and not suitable for every use case. PCM context remains in user docs
+to explain the motivation and help consumers judge suitability. No runtime behavior changed.

@@ -2,7 +2,7 @@
 
 A Flask-style web server in a single Python file. Copy **`microweb.py`** beside your app and run it.
 Standard library only, with no packages to install. Python 3.10 or newer.
-BSD 2-Clause licensed, including the notice embedded in the file.
+Licensed under BSD 2-Clause, with license text embedded in file.
 
 Save this as `app.py` beside `microweb.py`:
 
@@ -59,6 +59,11 @@ disables that check. This local HTTP server has no authentication, TLS, proxy ha
 deployment support. Bind to loopback for the intended desktop use.
 
 ## WebSockets
+
+WebSocket support is an independent, intentionally cut-down implementation. It is **not fully RFC 6455
+compliant** and is not suitable for all WebSocket use cases. Its scope is shaped by local dashboards and
+low-latency PCM relays; review the [supported features and limits](docs/websockets.md) before adopting it
+for another application.
 
 WebSocket routes share the HTTP server and need no extra packages:
 

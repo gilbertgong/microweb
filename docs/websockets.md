@@ -1,5 +1,10 @@
 # WebSocket routes
 
+This is an independent, intentionally cut-down WebSocket implementation, **not a fully RFC 6455
+compliant implementation** or a general replacement for the third-party `websockets` package. It is not
+suitable for every WebSocket use case. Local dashboards and low-latency PCM relays motivated its scope;
+the protocol limits below and PCM examples help assess whether it fits another application.
+
 WebSockets are optional to use and need no additional packages. HTTP routes and upgraded connections
 share one server and port; ordinary HTTP apps keep working as before.
 
@@ -116,7 +121,8 @@ closure cannot be forcibly canceled by the framework. Independently launched job
 Supported: protocol version 13, masked client frames, text/binary messages, bounded fragmentation,
 UTF-8 and control-frame validation, ping/pong and bounded closing handshakes. Compression/extensions
 and subprotocol negotiation are not implemented or advertised. Outgoing messages are not fragmented.
-This is a small local-server transport, not a claim of exhaustive protocol conformance certification.
+These supported features do not imply full RFC compliance. Applications needing broader protocol or
+deployment support should evaluate a full-featured WebSocket implementation.
 
 ## Streaming PCM
 
