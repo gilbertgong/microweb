@@ -70,7 +70,9 @@ def events(ws):
 ```
 
 Text and binary messages, incoming fragmentation, ping/pong, keepalive and connection cleanup are handled
-automatically. Defaults bound messages to 1 MiB and the incoming queue to 16 messages. Each connection
+automatically. Defaults bound messages to 1 MiB and queued payload to four times that limit, with a
+256-message ceiling for object overhead. Audio routes can configure a smaller byte budget for latency.
+Each connection
 uses its application request thread plus one protocol reader thread. Heartbeat timings are configurable.
 Run `python examples/websocket_echo.py` for a mounted browser demo, or read
 [WebSocket usage and limits](docs/websockets.md) for the API, lifecycle and supported protocol features.

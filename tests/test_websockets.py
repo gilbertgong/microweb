@@ -9,7 +9,7 @@ import time
 import unittest
 from unittest.mock import patch
 
-from microweb import App, Component, WebSocket, _Server
+from microweb import App, Component, WebSocket, _Server, _ws_unmask
 
 
 def frame(opcode, payload=b"", fin=True, masked=True, length_kind=None):
@@ -120,11 +120,37 @@ class HandshakeTests(unittest.TestCase):
 
     def test_registration_validation(self):
         for kw in ({"max_bytes": 0}, {"max_bytes": True}, {"timeout": 0}, {"timeout": float("nan")},
-                   {"ping_interval": 0}, {"ping_timeout": -1}, {"max_queue": 0}):
+                   {"ping_interval": 0}, {"ping_timeout": -1}, {"max_queue": 0},
+                   {"max_queue_bytes": 0}, {"max_queue_bytes": True},
+                   {"origins": "https://example.test"}, {"origins": ["https://example.test/path"]}):
             with self.assertRaises(ValueError):
                 self.app.websocket("/bad", **kw)
         with self.assertRaises(ValueError):
             self.app.websocket("/ws")(lambda ws: None)
+
+    def test_explicit_https_origin_works_with_backend_host_and_preserves_http_policy(self):
+        child = App()
+        child.websocket("/ws", origins=["https://talklink.pro"])(lambda ws: None)
+        child.post("/command")(lambda req: {"ok": True})
+        self.app.mount("/child", child)
+        values = {**headers("127.0.0.1:8765"), "Origin": "https://talklink.pro"}
+        self.assertEqual(self.app.handle("GET", "/child/ws", headers=values)[0], 101)
+        for origin in ("http://talklink.pro", "https://other.test", "https://talklink.pro:8443", "null"):
+            with self.subTest(origin=origin):
+                self.assertEqual(self.app.handle("GET", "/child/ws", headers={**values, "Origin": origin})[0], 403)
+        values.pop("Origin")
+        values.update({"X-Forwarded-Proto": "https", "X-Forwarded-Host": "talklink.pro"})
+        self.assertEqual(self.app.handle("GET", "/child/ws", headers=values)[0], 403)
+        self.assertEqual(self.app.handle("POST", "/child/command", headers={**headers(), "Origin": "https://talklink.pro"})[0], 403)
+
+    def test_explicit_origin_policy_covers_absent_origin_and_does_not_trust_forwarded_headers(self):
+        self.app.websocket("/allowed", origins=["https://example.test", None])(lambda ws: None)
+        values = headers(); values.pop("Origin")
+        self.assertEqual(self.app.handle("GET", "/allowed", headers=values)[0], 101)
+        spoofed = {**headers(), "Origin": "https://elsewhere.test", "X-Forwarded-Host": "example.test", "X-Forwarded-Proto": "https"}
+        self.assertEqual(self.app.handle("GET", "/allowed", headers=spoofed)[0], 403)
+        self.app.websocket("/none", origins=[])(lambda ws: None)
+        self.assertEqual(self.app.handle("GET", "/none", headers=values)[0], 403)
 
 
 class TransportTests(unittest.TestCase):
@@ -300,8 +326,107 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(ws.receive(), "first")
         self.assertIsNone(ws.receive())
 
+    def test_bulk_unmask_matches_reference_for_empty_odd_and_pcm_sizes(self):
+        for size in (0, 1, 3, 4, 5, 125, 126, 512, 640, 1024, 1536, 3072, 65536):
+            data = bytes(i % 256 for i in range(size))
+            for mask in (b"\0\0\0\0", b"abcd", b"\xff\x80\x01\xfe"):
+                self.assertEqual(_ws_unmask(data, mask), bytes(v ^ mask[i % 4] for i, v in enumerate(data)))
+
+    def test_byte_queue_defaults_to_four_max_messages(self):
+        ws, client = self.pair(max_bytes=2)
+        client.sendall(frame(2, b"ab") * 5)
+        self.assertEqual(read_frame(client), (8, struct.pack("!H", 1013)))
+        self.assertEqual([ws.receive() for _ in range(4)], [b"ab"] * 4)
+        self.assertIsNone(ws.receive())
+
+    def test_byte_queue_counts_utf8_not_characters(self):
+        ws, client = self.pair(max_bytes=16, max_queue_bytes=3)
+        client.sendall(frame(1, "é".encode()) * 2)
+        self.assertEqual(read_frame(client), (8, struct.pack("!H", 1013)))
+        self.assertEqual(ws.receive(), "é")
+        self.assertIsNone(ws.receive())
+
+    def test_byte_budget_is_released_when_messages_are_consumed(self):
+        ws, client = self.pair(max_bytes=16, max_queue_bytes=6)
+        client.sendall(frame(2, b"abc") * 2 + frame(9, b"barrier"))
+        self.assertEqual(read_frame(client), (10, b"barrier"))
+        self.assertEqual(ws.receive(), b"abc")
+        client.sendall(frame(2, b"xyz") + frame(9, b"barrier"))
+        self.assertEqual(read_frame(client), (10, b"barrier"))
+        self.assertEqual([ws.receive(), ws.receive()], [b"abc", b"xyz"])
+        self.assertFalse(ws.closed)
+
+    def test_fragmented_messages_count_completed_wire_bytes(self):
+        ws, client = self.pair(max_bytes=16, max_queue_bytes=3)
+        client.sendall(frame(1, b"\xc3", fin=False) + frame(0, b"\xa9") +
+                       frame(2, b"x") + frame(9, b"barrier"))
+        self.assertEqual(read_frame(client), (10, b"barrier"))
+        self.assertEqual([ws.receive(), ws.receive()], ["é", b"x"])
+
+    def test_empty_messages_are_still_count_bounded(self):
+        ws, client = self.pair(max_queue=4, max_queue_bytes=100)
+        client.sendall(frame(2, b"") * 5)
+        self.assertEqual(read_frame(client), (8, struct.pack("!H", 1013)))
+        self.assertEqual([ws.receive() for _ in range(4)], [b""] * 4)
+        self.assertIsNone(ws.receive())
+
+    def test_paced_pcm_tolerates_consumer_pause_without_loss(self):
+        # 16 kHz mono L16, 20 ms (640 bytes) per message. A 400 ms consumer
+        # pause exceeds the old 16-message limit but fits the explicit 32 KiB budget.
+        ws, client = self.pair(max_bytes=1024, max_queue_bytes=32768)
+        resume, paused, received, errors = threading.Event(), threading.Event(), [], []
+        packets = [i.to_bytes(2, "big") * 320 for i in range(40)]
+        def consumer():
+            try:
+                for i in range(len(packets)):
+                    if i == 5:
+                        paused.set()
+                        if not resume.wait(3): raise AssertionError("consumer was not resumed")
+                    received.append(ws.receive())
+            except Exception as error: errors.append(error)
+        worker = threading.Thread(target=consumer)
+        worker.start()
+        try:
+            for i, packet in enumerate(packets):
+                client.sendall(frame(2, packet))
+                if i == 4:
+                    self.assertTrue(paused.wait(2))
+                if i == 24:
+                    client.sendall(frame(9, b"pcm heartbeat"))
+                    self.assertEqual(read_frame(client), (10, b"pcm heartbeat"))
+                    self.assertFalse(ws.closed)
+                    resume.set()
+                time.sleep(0.02)
+            worker.join(3)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(errors, [])
+            self.assertEqual(received, packets)
+        finally:
+            resume.set(); ws._abort(); worker.join(3)
+
+    def test_sustained_pcm_backlog_closes_without_exceeding_byte_budget(self):
+        ws, client = self.pair(max_bytes=1024, max_queue_bytes=2560)
+        packet = b"\x12\x34" * 320
+        for _ in range(5):
+            client.sendall(frame(2, packet))
+            time.sleep(0.02)
+        self.assertEqual(read_frame(client), (8, struct.pack("!H", 1013)))
+        self.assertEqual([ws.receive() for _ in range(4)], [packet] * 4)
+        self.assertIsNone(ws.receive())
+
 
 class HostTests(unittest.TestCase):
+    def test_upgraded_tcp_socket_disables_nagle(self):
+        app = App()
+        @app.websocket("/ws")
+        def handler(ws):
+            ws.send(str(ws._sock.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY)))
+        with serving(app) as server:
+            with connect(server) as client:
+                self.assertEqual(read_frame(client), (1, b"1"))
+                self.assertEqual(read_frame(client)[0], 8)
+                client.sendall(frame(8, struct.pack("!H", 1000)))
+
     def test_mounted_echo_and_http_buffered_bytes(self):
         app, child = App(), App()
         @child.websocket("/echo")

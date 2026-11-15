@@ -15,6 +15,10 @@ The optional Shell supplies navigation and embeds mounted apps; it does not mana
   Each connection uses its existing handler thread plus one protocol reader and a bounded message queue.
   Close/error validation and bounded cleanup integrate with host shutdown before component stop.
   Compression/extensions and subprotocol negotiation are intentionally omitted. See docs/websockets.md.
+- PCM refinements add independent queued-payload byte limits (default 4 * max_bytes) and a 256-message
+  object ceiling, UTF-8 byte accounting, bulk XOR unmasking, TCP_NODELAY and per-route explicit origin
+  allowlists for HTTPS/proxy hosting without weakening ordinary HTTP mutation checks. PCM timing tests
+  cover 400 ms consumer jitter with lossless catch-up and bounded sustained-overflow disconnection.
 - Prefix mounts, mount-aware URLs, optional shell with landing page and persistent navigation.
 - Components overview with linked names, IDs, optional descriptions, placement and mounts; banners included.
   Primary navigation exposes its current page. Discovery entries accept optional description strings.
@@ -54,8 +58,8 @@ The downloader adapter and a synthetic workbench prove both combined and standal
 media ranges and shutdown without terminating an independent process. The actual voice workbench remains
 outside integration until its own handoff. No research application or live queue was changed.
 
-All 92 tests pass on Python 3.12; the 91-test suite before final handshake hardening passed on
-Python 3.14/MSYS2, followed by all 25 WebSocket tests after that change. Site packages are disabled. Coverage
+All 103 tests pass on Python 3.12 and Python 3.14/MSYS2 with site packages disabled, including
+36 WebSocket tests covering paced PCM, byte/count limits and explicit HTTPS origin allowlists. Coverage
 includes a portable copied demo, discovery, descriptions/overview, placement/order, lifecycle, active-request drain,
 synthetic-workbench, disposable releases and mocked publishing/retry/checksum checks. No live publishing
 was performed to test --push. README focuses on users; testing and release instructions live in AI/USAGE.md.

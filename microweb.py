@@ -285,6 +285,13 @@ def _ws_close_code(code):
                                  or 3000 <= code <= 4999)
 
 
+def _ws_unmask(payload, mask):
+    """Bulk XOR in C; avoids a Python iteration for each PCM sample byte."""
+    size = len(payload)
+    repeated = (mask * ((size + 3) // 4))[:size]
+    return (int.from_bytes(payload, "little") ^ int.from_bytes(repeated, "little")).to_bytes(size, "little")
+
+
 class WebSocket:
     """One upgraded connection. receive() returns str/bytes, or None after closure.
 
@@ -294,9 +301,11 @@ class WebSocket:
     """
 
     def __init__(self, sock, req, *, initial=b"", max_bytes=1048576, timeout=10,
-                 ping_interval=20, ping_timeout=20, max_queue=16):
+                 ping_interval=20, ping_timeout=20, max_queue=256, max_queue_bytes=None):
         self.req, self.max_bytes, self.timeout = req, max_bytes, timeout
         self._ping_interval, self._ping_timeout, self._max_queue = ping_interval, ping_timeout, max_queue
+        self._max_queue_bytes = 4 * max_bytes if max_queue_bytes is None else max_queue_bytes
+        self._queued_bytes, self._message_bytes = 0, 0
         self._next_ping = time.monotonic() + ping_interval if ping_interval is not None else None
         self._pending_ping = None
         self._messages, self._incoming = deque(), threading.Condition()
@@ -464,7 +473,7 @@ class WebSocket:
                 if length + len(self._fragment) > self.max_bytes:
                     raise _WebSocketError(1009, "message too large")
             mask = self._read_exact(4)
-            payload = bytes(b ^ mask[i % 4] for i, b in enumerate(self._read_exact(length)))
+            payload = _ws_unmask(self._read_exact(length), mask)
             if opcode == 8:
                 if len(payload) == 1:
                     raise _WebSocketError(1002, "invalid close payload")
@@ -495,6 +504,7 @@ class WebSocket:
                 continue
             opcode, message = self._fragment_opcode, bytes(self._fragment)
             self._fragment_opcode, self._fragment = None, bytearray()
+            self._message_bytes = len(message)
             if opcode == 1:
                 try:
                     return message.decode("utf-8")
@@ -512,7 +522,10 @@ class WebSocket:
                 with self._incoming:
                     if len(self._messages) >= self._max_queue:
                         raise _WebSocketError(1013, "incoming message queue full")
-                    self._messages.append(message)
+                    if self._queued_bytes + self._message_bytes > self._max_queue_bytes:
+                        raise _WebSocketError(1013, "incoming byte queue full")
+                    self._messages.append((message, self._message_bytes))
+                    self._queued_bytes += self._message_bytes
                     self._incoming.notify()
         except _WebSocketError as error:
             try:
@@ -537,7 +550,11 @@ class WebSocket:
             with self._incoming:
                 while not self._messages and not self.closed:
                     self._incoming.wait()
-                return self._messages.popleft() if self._messages else None
+                if not self._messages:
+                    return None
+                message, size = self._messages.popleft()
+                self._queued_bytes -= size
+                return message
         finally:
             self._receive_lock.release()
 
@@ -664,7 +681,8 @@ class App:
         return self.route(path, ["POST"])
 
     def websocket(self, path, *, max_bytes=1048576, timeout=10,
-                  ping_interval=20, ping_timeout=20, max_queue=16):
+                  ping_interval=20, ping_timeout=20, max_queue=256, max_queue_bytes=None,
+                  origins=None):
         """Register handler(ws); timeout bounds I/O stalls, not idle receive time."""
         if type(max_bytes) is not int or max_bytes <= 0:
             raise ValueError("max_bytes must be a positive integer")
@@ -675,11 +693,29 @@ class App:
                 raise ValueError(f"{name} must be positive and finite")
         if type(max_queue) is not int or max_queue <= 0:
             raise ValueError("max_queue must be a positive integer")
+        if max_queue_bytes is not None and (type(max_queue_bytes) is not int or max_queue_bytes <= 0):
+            raise ValueError("max_queue_bytes must be a positive integer or None")
+        allowed_origins = None
+        if origins is not None:
+            if isinstance(origins, (str, bytes)):
+                raise ValueError("origins must be a collection of origins, not a string")
+            allowed_origins = frozenset(origins)
+            for origin in allowed_origins:
+                if origin is None:
+                    continue
+                if not isinstance(origin, str):
+                    raise ValueError("origins entries must be HTTP(S) origins or None")
+                parsed = urllib.parse.urlsplit(origin)
+                if (parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username is not None
+                        or parsed.password is not None or parsed.path or parsed.query or parsed.fragment):
+                    raise ValueError("origins entries must be HTTP(S) origins without a path")
+                parsed.port  # validate port syntax/range at registration, not during requests
         def register(handler):
             if path in self.websocket_routes:
                 raise ValueError("duplicate WebSocket route")
             self.websocket_routes[path] = (handler, dict(max_bytes=max_bytes, timeout=timeout,
-                ping_interval=ping_interval, ping_timeout=ping_timeout, max_queue=max_queue))
+                ping_interval=ping_interval, ping_timeout=ping_timeout, max_queue=max_queue,
+                max_queue_bytes=max_queue_bytes), allowed_origins)
             return handler
         return register
 
@@ -831,8 +867,12 @@ class App:
                 or not req.headers.get("Host") or getattr(req, "_http_version", "HTTP/1.1") != "HTTP/1.1"
                 or "Transfer-Encoding" in req.headers or req.headers.get("Content-Length", "0") != "0"):
             raise HTTPError(400, "invalid WebSocket upgrade")
+        handler, options, allowed_origins = self.websocket_routes[req.path]
         origin = req.headers.get("Origin")
-        if self.same_origin and origin and origin != "http://" + req.headers.get("Host", ""):
+        if allowed_origins is not None:
+            if origin not in allowed_origins:
+                raise HTTPError(403, "WebSocket origin not allowed")
+        elif self.same_origin and origin and origin != "http://" + req.headers.get("Host", ""):
             raise HTTPError(403, "cross-origin WebSocket refused")
         try:
             key = req.headers.get("Sec-WebSocket-Key", "")
@@ -841,7 +881,6 @@ class App:
         except (ValueError, UnicodeError):
             raise HTTPError(400, "invalid WebSocket key") from None
         accept = base64.b64encode(hashlib.sha1((key + _WS_GUID).encode("ascii")).digest()).decode("ascii")
-        handler, options = self.websocket_routes[req.path]
         return 101, [("Upgrade", "websocket"), ("Connection", "Upgrade"),
                      ("Sec-WebSocket-Accept", accept)], _WebSocketUpgrade(req, handler, options)
 
@@ -932,6 +971,8 @@ class App:
                         self.send_header(name, value)
                     self.end_headers()
                     self.wfile.flush()
+                    if self.connection.family in (socket.AF_INET, socket.AF_INET6):
+                        self.connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                     self.connection.setblocking(False)
                     # Preserve any bytes already buffered by the HTTP reader.
                     initial = self.rfile.read1(65536)

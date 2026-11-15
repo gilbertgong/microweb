@@ -41,7 +41,7 @@ when handlers return, stop iterating or raise; handler errors use close code 101
 ## Automatic protocol handling
 
 ```python
-@app.websocket('/events', max_bytes=1048576, max_queue=16,
+@app.websocket('/events', max_bytes=1048576, max_queue_bytes=None, max_queue=256,
                timeout=10, ping_interval=20, ping_timeout=20)
 def events(ws):
     for message in ws:
@@ -54,10 +54,14 @@ the application handler is busy. Completed messages enter a bounded queue.
 
 - `max_bytes`: maximum incoming **whole-message** size, including all fragments; also limits outgoing
   messages. Default 1 MiB. Incoming excess closes with 1009 before the excess payload is allocated.
-- `max_queue`: maximum number of completed messages awaiting application consumption; default 16.
-  A full queue closes the connection with 1013 rather than buffering indefinitely or blocking control
-  frame handling. Applications that need larger bursts can increase it explicitly. Queue storage is
-  bounded by the message count and message limit, plus the message currently being assembled.
+- `max_queue_bytes`: maximum sum of queued message payload bytes. Default `None` derives a budget of
+  `4 * max_bytes` (4 MiB with the default message limit). Text counts UTF-8 bytes, not characters;
+  consuming a message releases its byte budget. This bounds queued payload, not total process memory:
+  Python objects, decoding/reassembly buffers and the current message also use memory.
+- `max_queue`: separate maximum number of completed messages awaiting application consumption;
+  default 256. This caps object overhead even for empty messages. Either limit closes the connection
+  with 1013 rather than buffering indefinitely or blocking control-frame handling. Queued messages
+  remain readable before `receive()` returns `None`; the overflowing message isn't delivered.
 - `timeout`: maximum wait for a partial-frame read or send operation to progress to completion;
   default 10 seconds. Idle receives are allowed indefinitely. Bytes already received are retained
   across polling waits; a timed-out partial frame closes instead of restarting at the wrong byte.
@@ -79,10 +83,23 @@ when the network disappears and no server close frame can reach the browser.
 constructs its endpoint relative to the mounted page. HTTP and WebSocket handlers may share a path:
 an upgrade selects the WebSocket handler; an ordinary HTTP request selects the HTTP handler.
 
-With the default `same_origin=True`, a supplied `Origin` must match `http://` plus the incoming Host
-header. Requests without Origin are allowed for non-browser clients. This follows microweb's plain-HTTP
-hosting model; TLS termination/proxy deployments must account for their external origin. Explicit
-`same_origin=False` disables this check for an app. Origin checks are not authentication.
+With no route override and the default `same_origin=True`, a supplied `Origin` must match `http://`
+plus the incoming Host header. Requests without Origin are allowed for non-browser clients.
+For an external HTTPS origin behind TLS termination, configure the route explicitly:
+
+```python
+@app.websocket('/events', origins=['https://talklink.pro'])
+def events(ws):
+    ...
+```
+
+`origins` replaces only this WebSocket route's default origin policy with an exact allowlist. Origins
+include scheme and any explicit port, without a path; `https://talklink.pro` doesn't allow
+`http://talklink.pro` or `https://talklink.pro:8443`. Host may be rewritten by the proxy; the explicit
+allowlist is matched against Origin directly. No forwarded headers are trusted automatically.
+Include `None` in the list to permit missing Origin headers; an empty list refuses all upgrades.
+Ordinary HTTP mutation checks stay unchanged. Explicit `same_origin=False` disables the default app
+check but doesn't bypass a route's explicit allowlist. Origin checks are not authentication.
 
 Import, factory construction and route registration start no threads or services. The reader thread
 starts only after an actual upgrade. Shutdown closes WebSockets before draining requests and stopping
@@ -93,3 +110,25 @@ Supported: protocol version 13, masked client frames, text/binary messages, boun
 UTF-8 and control-frame validation, ping/pong and bounded closing handshakes. Compression/extensions
 and subprotocol negotiation are not implemented or advertised. Outgoing messages are not fragmented.
 This is a small local-server transport, not a claim of exhaustive protocol conformance certification.
+
+## Streaming PCM
+
+TCP sockets use `TCP_NODELAY` after upgrade to avoid Nagle buffering of small outgoing messages.
+Client payload unmasking uses bulk integer XOR rather than a Python loop over individual bytes.
+
+For continuous audio, size limits should reflect the audio format and tolerable consumer backlog.
+The maximum message size and the queued-byte budget are independently configurable:
+
+```python
+@app.websocket('/audio', max_bytes=4096, max_queue_bytes=32768)
+def audio(ws):
+    for packet in ws:
+        ...
+```
+
+For 16 kHz mono 16-bit PCM, a 20 ms packet is 640 bytes; a 32 KiB queue holds about 1.024 seconds of
+audio. At 48 kHz mono, the same byte budget holds about 341 ms. This is an illustrative configuration,
+not a format negotiation mechanism; channels, sample rate, endianness and packet format belong to the
+application. A large memory budget can also mean undesirable latency. Configure it deliberately.
+The transport doesn't silently drop audio on overflow or interpret an audio format. Tests exercise
+a 400 ms consumer pause during paced 20 ms PCM traffic, and bounded disconnection for sustained backlog.

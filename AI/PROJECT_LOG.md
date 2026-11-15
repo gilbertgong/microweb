@@ -251,3 +251,20 @@ check, then all 25 WebSocket tests with that check. Independent Node WebSocket c
 binary, 500 KB, empty messages, automatic heartbeat beyond 20 seconds and clean close. Browser automation
 was disabled in Work settings; no browser UI check is claimed. JavaScript syntax and whitespace checks
 pass. No dependency installation, version bump, release, push or change to running consumer copies.
+
+## 2026-11-14 — PCM streaming refinements
+
+The user clarified the primary WebSocket workload as L16 PCM in 16–32 ms chunks and authorized review
+follow-ups. Added max_queue_bytes (default four times max_bytes), retained an independently configurable
+256-message ceiling for object overhead/empty messages, and account text as original UTF-8 bytes.
+Dequeue releases the byte budget; overflow remains explicit 1013 closure without silent packet dropping.
+Enabled TCP_NODELAY for upgraded TCP sockets and bulk integer-XOR unmasking. A local microbenchmark at
+640/1536/3072 bytes showed roughly 20–27x lower unmasking time; this is not an end-to-end latency claim.
+Added per-route exact origin allowlists, supporting external HTTPS origins with rewritten backend Host
+without disabling HTTP mutation checks or trusting forwarded headers. Mounted routing was already
+correct and remains covered by wire-level tests. New tests cover byte accounting/reuse, empty messages,
+fragmentation, allowlists, actual TCP_NODELAY, paced 20 ms PCM with a 400 ms consumer pause and bounded
+sustained backlog. Audio-format interpretation and latency/drop policy remain application-owned.
+
+Validation: all 103 tests pass on Python 3.12 and Python 3.14 under MSYS2/UCRT64, including
+36 WebSocket tests. Whitespace checks pass. No consumer copies, application state or jobs changed.

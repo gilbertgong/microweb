@@ -104,3 +104,9 @@ Use docs/websockets.md for the route API and limits. Run python examples/websock
 and open the printed loopback URL. Verify both a short message and Send 500 KB; Reconnect is explicit.
 No packages or models are required. A browser supplies protocol pong replies automatically; test
 keepalive and malformed peers with tests/test_websockets.py rather than modifying a live application.
+
+For PCM relay routes, configure max_bytes for the largest expected packet/control message and
+max_queue_bytes for tolerable backlog, rather than leaving a multi-MiB generic queue. Keep max_queue
+as an independent object-count ceiling. See the format-specific arithmetic in docs/websockets.md.
+TLS-terminated apps should use explicit route origins; do not bypass all origin checks or assume
+forwarded headers are trusted.
