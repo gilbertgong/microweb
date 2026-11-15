@@ -99,9 +99,12 @@ when the network disappears and no server close frame can reach the browser.
 constructs its endpoint relative to the mounted page. HTTP and WebSocket handlers may share a path:
 an upgrade selects the WebSocket handler; an ordinary HTTP request selects the HTTP handler.
 
-With no route override and the default `same_origin=True`, a supplied `Origin` must match `http://`
-plus the incoming Host header. Requests without Origin are allowed for non-browser clients.
-For an external HTTPS origin behind TLS termination, configure the route explicitly:
+With no route override and the default `same_origin=True`, a supplied `Origin` must match `https://`
+plus the incoming Host header. HTTP is also accepted when Host names `localhost`, `127.0.0.1` or
+`[::1]`. Scheme, host spelling and explicit port must match exactly. Malformed Hosts are rejected.
+This same policy applies to HTTP mutation requests. Requests without Origin remain allowed.
+HTTPS behind a proxy works by default when the public Host is preserved. If the proxy rewrites Host,
+or a route needs a different set of origins, configure it explicitly:
 
 ```python
 @app.websocket('/events', origins=['https://talklink.pro'])

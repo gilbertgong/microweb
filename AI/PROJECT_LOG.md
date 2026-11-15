@@ -307,3 +307,11 @@ Added three regressions for buffer identity/leftovers and unfragmented receive i
 scripts/benchmark_ws_receive.py and AI/WS_RECEIVE_COPIES.md: local complete-frame parser CPU
 measurements improved roughly 21–36%, with small absolute savings and no end-to-end claim.
 No version bump, manifest update, release or changes to consumer copies.
+
+## 2026-11-15 — HTTPS default origin policy with local HTTP exceptions
+
+User authorized direct main edits to share origin validation across HTTP mutations and WebSocket
+upgrades. Default accepts exact HTTPS Host matches, plus exact HTTP matches for localhost, 127.0.0.1
+and ::1. Reject malformed hosts; preserve missing-Origin behavior, explicit route allowlists and
+same_origin=False. No forwarded headers are trusted. This intentionally rejects non-loopback HTTP
+origins previously accepted by the default. Tests cover both transports, ports and malformed inputs.
