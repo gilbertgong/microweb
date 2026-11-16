@@ -1,4 +1,5 @@
 import errno
+import socket
 import threading
 import unittest
 import urllib.request
@@ -112,9 +113,50 @@ class ComponentTests(unittest.TestCase):
             done = threading.Event()
             app.run('127.0.0.1', 0, done.set, stop_event=done)
 
+    def test_shutdown_closes_idle_and_incomplete_http_connections(self):
+        for prefix in [b'', b'GET / HTTP/1.1\r\nHost: localhost\r\n']:
+            with self.subTest(prefix=prefix):
+                app = web.App()
+                with web._Server(('127.0.0.1', 0), app._handler_class()) as server:
+                    with socket.create_connection(server.server_address, timeout=2) as client:
+                        if prefix:
+                            client.sendall(prefix)
+                        server.handle_request()  # accepted, but no complete request
+                        self.assertEqual(server._active, 1)
+                        drained = threading.Event()
+                        def drain():
+                            server.drain_requests()
+                            drained.set()
+                        thread = threading.Thread(target=drain, daemon=True)
+                        thread.start()
+                        try:
+                            self.assertTrue(drained.wait(2), 'idle socket blocked shutdown')
+                            self.assertEqual(client.recv(1), b'')
+                            self.assertEqual(server._active, len(server._pending))
+                        finally:
+                            client.close()
+                            thread.join(2)
+
+    def test_second_interrupt_leaves_drain_and_stops_components(self):
+        with web._Server(('127.0.0.1', 0), web.App()._handler_class()) as server:
+            server._active = 1
+            with patch.object(server._requests, 'wait', side_effect=KeyboardInterrupt):
+                with self.assertRaises(KeyboardInterrupt):
+                    server.drain_requests()
+            server._active = 0
+        events = []
+        component = self.component('a', events)
+        def interrupt():
+            raise KeyboardInterrupt
+        with patch.object(web._Server, 'drain_requests', side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                component.run('127.0.0.1', 0, interrupt)
+        self.assertEqual(events, ['start a', 'stop a'])
+
     def test_active_request_finishes_before_component_stop(self):
         entered, release, ready, done = [threading.Event() for _ in range(4)]
         events, servers, errors = [], [], []
+        draining = threading.Event()
         app = web.App()
         @app.get('/wait')
         def wait(req):
@@ -128,6 +170,11 @@ class ComponentTests(unittest.TestCase):
         def capture(*args, **kwargs):
             server = original(*args, **kwargs)
             servers.append(server)
+            original_drain = server.drain_requests
+            def drain():
+                draining.set()
+                original_drain()
+            server.drain_requests = drain
             return server
         def host():
             try:
@@ -149,6 +196,8 @@ class ComponentTests(unittest.TestCase):
                 client.start()
                 self.assertTrue(entered.wait(5))
                 done.set()
+                self.assertTrue(draining.wait(5))
+                self.assertTrue(thread.is_alive())
                 self.assertNotIn('stop', events)
                 release.set()
                 client.join(8)

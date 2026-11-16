@@ -141,8 +141,9 @@ shell.run("127.0.0.1", 8765)
 
 `start_services` and `stop_services` are your zero-argument functions; either callback can be omitted.
 The host binds before starting services, announces readiness afterward, and stops components in reverse order.
-Failed partial startup is cleaned up too. Shutdown drains accepted HTTP requests before component teardown;
-idle sockets have a 30-second timeout. A component's stop callback joins its owned workers. Independently
+Failed partial startup is cleaned up too. Shutdown closes idle or incomplete HTTP connections and drains
+dispatched requests before component teardown. A second Ctrl+C interrupts that wait and continues cleanup;
+remaining handlers may then lose access to component resources. A component's stop callback joins its owned workers. Independently
 owned jobs are untouched. Component instances support one host run; construct a new instance to run again.
 An optional `stop_event=threading.Event()` lets an embedding host request shutdown without Ctrl+C.
 

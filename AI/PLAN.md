@@ -95,3 +95,8 @@ Default origin checks now accept exact HTTPS Host matches and local HTTP excepti
 127.0.0.1 and ::1, shared by HTTP mutations and WebSocket upgrades. Explicit route allowlists retain
 precedence; no forwarded-header trust is introduced. Latest validation: 116 full tests on Python 3.12
 and all 49 WebSocket tests on Python 3.14. Included in v0.2.2.
+
+Shutdown follow-up on codex/shutdown-idle-connections: close unused/incomplete accepted sockets,
+reject dispatch once stopping, and wait only for dispatched handlers. A second Ctrl+C abandons the
+drain and continues cleanup, then propagates. All 118 tests pass on Python 3.14; all 12 lifecycle
+tests pass on Python 3.12. Not released; runtime version remains v0.2.2.

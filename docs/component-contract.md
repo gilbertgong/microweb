@@ -165,6 +165,10 @@ Cleanup must preserve the original startup/serving error when one exists.
 requests or work reach a safe stopping point before releasing the resources they use. HTTP handlers already
 running at shutdown must not race against closed component resources. The host and implementation must
 coordinate that drain; ending the accept loop alone does not mean request threads have finished.
+The host closes accepted connections that have not reached dispatch, including incomplete HTTP headers;
+requests racing with shutdown may be disconnected. Normally, dispatched handlers finish before component
+teardown. A second Ctrl+C interrupts the drain and proceeds with cleanup, intentionally abandoning that
+guarantee; this does not forcibly terminate handler threads or independently owned jobs.
 
 Specific application responsibilities include:
 
