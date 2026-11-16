@@ -99,4 +99,4 @@ and all 49 WebSocket tests on Python 3.14. Included in v0.2.2.
 Shutdown follow-up on codex/shutdown-idle-connections: close unused/incomplete accepted sockets,
 reject dispatch once stopping, and wait only for dispatched handlers. A second Ctrl+C abandons the
 drain and continues cleanup, then propagates. All 118 tests pass on Python 3.14; all 12 lifecycle
-tests pass on Python 3.12. Not released; runtime version remains v0.2.2.
+tests pass on Python 3.12. Included in v0.2.3.
