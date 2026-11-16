@@ -315,3 +315,15 @@ upgrades. Default accepts exact HTTPS Host matches, plus exact HTTP matches for 
 and ::1. Reject malformed hosts; preserve missing-Origin behavior, explicit route allowlists and
 same_origin=False. No forwarded headers are trusted. This intentionally rejects non-loopback HTTP
 origins previously accepted by the default. Tests cover both transports, ports and malformed inputs.
+
+## 2026-11-15 — Prompt shutdown with unused accepted connections
+
+On codex/shutdown-idle-connections, track connections waiting for HTTP dispatch separately from
+running handlers. Shutdown closes idle/incomplete connections and drains dispatched handlers only;
+requests racing with shutdown may be dropped. Suppress expected socket errors only for pending
+connections during shutdown. A second Ctrl+C leaves the drain, attempts component/server cleanup,
+and propagates the interrupt; it does not terminate running handler threads.
+
+Regression coverage checks idle preconnects, incomplete headers, interrupt propagation and cleanup,
+and active-handler completion before component teardown. All 118 tests pass on Python 3.14/MSYS2;
+all 12 lifecycle tests also pass on Python 3.12. No version bump, release or consumer updates.
