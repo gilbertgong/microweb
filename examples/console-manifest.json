@@ -1,0 +1,5 @@
+{
+  "manifests": [
+    "demo_components/microweb-component.json"
+  ]
+}

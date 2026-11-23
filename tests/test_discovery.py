@@ -1,3 +1,5 @@
+import contextlib
+import io
 import importlib.util
 import json
 import shutil
@@ -6,6 +8,7 @@ import threading
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 import microweb
 
@@ -46,6 +49,106 @@ def create_component(settings):
         manifest.update(changes)
         (folder / console.MANIFEST).write_text(json.dumps({'component_api': api, 'components': [manifest]}), encoding='utf-8')
         return folder
+
+    def console_manifest(self, paths):
+        folder = self.root / 'launch'
+        folder.mkdir(exist_ok=True)
+        path = folder / 'manifest.json'
+        path.write_text(json.dumps({'manifests': [str(p) for p in paths]}), encoding='utf-8')
+        return path
+
+    def test_manifest_loads_scattered_checkouts_without_scanning_the_default_directory(self):
+        tool = self.install()
+        external = self.root / 'external tools'
+        tool.rename(external)
+        demo = self.demo()
+        self.install('unlisted', source="raise AssertionError('unlisted checkout imported')")
+        manifest = self.console_manifest(['../external tools/microweb-component.json', demo.resolve()])
+        # Relative entries follow the console manifest, not the working directory.
+        with contextlib.chdir(self.components):
+            shell = console.build_shell(data_dir=self.data, overrides={'tool': {'message': 'custom'}},
+                                        manifest=manifest)
+        self.assertEqual(shell.problems, [])
+        self.assertEqual(set(shell.tools), {'/tool', '/demo-library', '/demo-workbench'})
+        self.assertEqual(list(shell.banners), ['/demo-machine'])
+        self.assertFalse(self.data.exists())
+        values = json.loads(shell.handle('GET', '/tool/api/settings')[2])
+        self.assertEqual(values['message'], 'custom')
+        self.assertEqual(values['session_file'], 'session.json')
+        self.assertEqual(values['settings_dir'], str(self.data / 'tool'))
+        done = threading.Event()
+        shell.run('127.0.0.1', 0, done.set, stop_event=done)
+        self.assertEqual((self.data / 'tool/session.json').read_text(), 'custom')
+        self.assertTrue((self.data / 'tool/stopped').is_file())
+        self.assertFalse((external / 'session.json').exists())
+
+    def test_manifest_metadata_only_and_missing_or_bad_component_is_isolated(self):
+        tool = self.install(source="raise AssertionError('metadata scan imported code')")
+        bad = self.root / 'bad.json'
+        bad.write_text('not JSON')
+        manifest = self.console_manifest([tool / console.MANIFEST, self.root / 'missing.json', bad])
+        entries, problems = console.discover(manifest=manifest)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(len(problems), 2)
+        self.assertIn(str(self.root / 'missing.json'), problems[0])
+        self.assertIn(str(bad), problems[1])
+        self.assertFalse(self.data.exists())
+
+    def test_manifest_duplicate_ids_rejected_across_listed_checkouts_before_import(self):
+        first = self.install('one', source="raise AssertionError('duplicate imported')")
+        second = self.install('two', source="raise AssertionError('duplicate imported')")
+        manifest = self.console_manifest([first / console.MANIFEST, second / console.MANIFEST])
+        shell = console.build_shell(data_dir=self.data, manifest=manifest)
+        self.assertEqual(shell.components, [])
+        self.assertIn('duplicate component id tool', shell.problems[0])
+
+    def test_invalid_console_manifest_fails_instead_of_falling_back_to_directory_scan(self):
+        manifest = self.console_manifest([])
+        for value in [[], {}, {'manifests': 'tool.json'}, {'manifests': [None]},
+                      {'manifests': ['']}, {'manifests': ['  ']}]:
+            with self.subTest(value=value):
+                manifest.write_text(json.dumps(value))
+                with self.assertRaises(ValueError):
+                    console.build_shell(data_dir=self.data, manifest=manifest)
+        manifest.write_text('invalid JSON')
+        with self.assertRaises(ValueError):
+            console.discover(manifest=manifest)
+        with self.assertRaises(OSError):
+            console.discover(manifest=manifest.with_name('missing.json'))
+        self.assertFalse(self.data.exists())
+
+    def test_empty_manifest_and_exclusive_cli_sources(self):
+        manifest = self.console_manifest([])
+        shell = console.build_shell(data_dir=self.data, manifest=manifest)
+        self.assertEqual(shell.components, [])
+        self.assertEqual(shell.problems, [])
+        _, args = console.parse_args([str(manifest), '--port', '9999'])
+        self.assertEqual(args.manifest, manifest)
+        self.assertIsNone(args.components_dir)
+        self.assertEqual(args.port, 9999)
+        _, args = console.parse_args([])
+        self.assertIsNone(args.manifest)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            console.parse_args([str(manifest), '--components-dir', str(self.components)])
+        with self.assertRaises(ValueError):
+            console.build_shell(self.components, self.data, manifest=manifest)
+
+    def test_cli_uses_manifest_and_reports_missing_file_before_serving(self):
+        tool = self.install()
+        manifest = self.console_manifest([tool / console.MANIFEST])
+        with patch('sys.argv', ['component_console.py', str(manifest), '--data-dir', str(self.data)]), \
+                patch.object(console.DiscoveryShell, 'run', autospec=True) as run:
+            console.main()
+        shell = run.call_args.args[0]
+        self.assertEqual(shell.problems, [])
+        self.assertIn('/tool', shell.tools)
+        self.assertFalse(self.data.exists())
+        with patch('sys.argv', ['component_console.py', str(self.root / 'missing.json')]), \
+                patch.object(console.DiscoveryShell, 'run') as run, \
+                contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+            console.main()
+        self.assertEqual(error.exception.code, 2)
+        run.assert_not_called()
 
     def test_empty_and_missing_directories_show_help_without_writes(self):
         for path in [self.components, self.root / 'missing']:

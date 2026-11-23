@@ -327,3 +327,15 @@ and propagates the interrupt; it does not terminate running handler threads.
 Regression coverage checks idle preconnects, incomplete headers, interrupt propagation and cleanup,
 and active-handler completion before component teardown. All 118 tests pass on Python 3.14/MSYS2;
 all 12 lifecycle tests also pass on Python 3.12. No version bump, release or consumer updates.
+
+## 2026-11-22 — Explicit component manifest lists
+
+The optional component_console.py launcher accepts a positional JSON console manifest with a manifests
+array of component manifest file paths. This selects checkouts in different locations without cloning
+or moving them into components/. Relative entries resolve beside the console manifest; absolute paths
+work too. Selection replaces directory scanning; --components-dir remains available and mutually exclusive.
+Both modes share metadata validation, duplicate-ID exclusion, ordering, imports and lifecycle. Settings
+and data-directory behavior are unchanged. Added a bundled demo list and documentation; runtime unchanged.
+
+Validation: all 124 offline tests pass on Python 3.12 and Python 3.14/MSYS2. The bundled list
+constructs both demo panels and shared banner; no runtime/version changes or publishing.

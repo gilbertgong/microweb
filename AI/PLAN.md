@@ -38,7 +38,10 @@ The optional Shell supplies navigation and embeds mounted apps; it does not mana
   No packages, external tools, other checkouts or data setup; no GPU UI/probes or generated files.
   Individual views also run standalone. Advanced downloader integration remains a separate optional proof.
 - Optional examples/component_console.py discovers local checkout manifests under ignored components/,
-  mounts compatible apps and shows load problems. Data lives separately under ignored data/; no installation
+  or accepts a positional console manifest with a manifests array selecting component manifest files anywhere.
+  Relative paths resolve beside that console manifest; explicit selection replaces directory scanning.
+  examples/console-manifest.json lists the bundled synthetic checkout without copying.
+  The launcher mounts compatible apps and shows load problems. Data lives separately under ignored data/; no installation
   or downloads. Explicit launchers and the single-file runtime remain independent of discovery.
   A manifest's components array supports multiple views per checkout; order sorts panels left to right and
   banners top to bottom across repos. examples/demo_components supplies two synthetic panels and one banner.
@@ -100,3 +103,8 @@ Shutdown follow-up on codex/shutdown-idle-connections: close unused/incomplete a
 reject dispatch once stopping, and wait only for dispatched handlers. A second Ctrl+C abandons the
 drain and continues cleanup, then propagates. All 118 tests pass on Python 3.14; all 12 lifecycle
 tests pass on Python 3.12. Included in v0.2.3.
+
+Explicit manifest-list follow-up: all 124 tests pass on Python 3.12 and Python 3.14/MSYS2.
+Six new discovery tests cover scattered paths, CLI selection, invalid/missing manifests, duplicate IDs,
+settings and lifecycle; bundled console-manifest.json loads both demo panels and the banner.
+No runtime/version change, release or consumer update.
