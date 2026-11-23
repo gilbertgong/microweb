@@ -1,7 +1,7 @@
 # Optional component-discovery console
 
-This is an example under `examples/`, not the framework's primary launch mode. It adds a directory
-convention around Component and Shell.add. Neither microweb.py nor explicit registration depends on it.
+This is an example under `examples/`, not the framework's primary launch mode. It adds directory discovery or an explicit list of checkout manifests
+around Component and Shell.add. Neither microweb.py nor explicit registration depends on it.
 The launcher never downloads, clones, updates or installs component code or dependencies.
 
 ## Run
@@ -30,6 +30,45 @@ python examples/component_console.py --components-dir /path/to/tools --data-dir 
 
 Those explicit relative command-line locations resolve against the current working directory. Without
 arguments, components and data are relative to the microweb repository, independent of the working directory.
+
+## Select checkouts in different locations
+
+Instead of scanning a common directory, create a console manifest such as `manifest.json`:
+
+```json
+{
+  "manifests": [
+    "../librivox-download/microweb-component.json",
+    "../voice-tools/microweb-component.json"
+  ]
+}
+```
+
+```sh
+python examples/component_console.py manifest.json
+```
+
+Each entry names a local component manifest file, not a repository URL. Relative entries resolve against
+**the console manifest's directory**, independent of the working directory. Absolute paths work too;
+use forward slashes for Windows paths in JSON (or escape each backslash). Factories load from each
+listed component manifest's parent directory, just as they would from a discovered checkout root.
+
+This selects only the listed manifests; it does not also scan `components/`. Do not combine the positional
+manifest argument with `--components-dir`. Without either option, the existing `components/` scan remains
+the default. `--settings`, `--data-dir` and `--port` work in either mode. Data still defaults to this
+repository's `data/`, not a directory beside the console manifest. An empty manifests array loads no tools.
+Panel/banner order still uses each component's `order` and ID; list order does not override that metadata.
+
+A ready-to-run example lists the bundled synthetic components without copying them:
+
+```sh
+python examples/component_console.py examples/console-manifest.json
+```
+
+An unreadable or invalid console manifest fails before serving. Missing or invalid individual component
+manifests appear as load problems while valid companions remain usable. Duplicate component IDs are
+excluded across all listed manifests before any factory imports. Listing a manifest permits importing its
+local application code; the launcher still performs no downloads, installs or updates.
 
 ## Manifest supplied by each tool
 
@@ -110,7 +149,8 @@ Its Machine values are explicitly synthetic. This fixture starts no workers and 
 Its banner shows CPU and memory only; no GPU tooling is required. For the same bundled views without
 copying anything or using discovery, simply run `python examples/console.py`.
 
-The launcher scans only immediate subdirectories and reads all metadata before importing tool code.
+Directory discovery scans only immediate subdirectories. Both modes read all selected metadata before
+importing tool code.
 Duplicate IDs are excluded together, including duplicates within one repo. Invalid entries do not prevent
 valid companions from loading. Invalid manifests, unavailable dependencies and factory failures
 appear on the landing page and in the terminal; other loadable tools still appear. A service-start failure

@@ -1,6 +1,7 @@
 """Optional local component-discovery example. Never downloads or installs code.
 
 Clone tools into components/, then run python examples/component_console.py.
+Or run python examples/component_console.py manifest.json to list checkouts anywhere.
 Each tool supplies microweb-component.json. Data stays separately under data/.
 """
 import argparse
@@ -18,15 +19,30 @@ from microweb import Component, Shell
 MANIFEST = 'microweb-component.json'
 
 
-def discover(directory):
-    """Read metadata only, before importing any installed component code."""
+def discover(directory=None, *, manifest=None):
+    """Read metadata only; a console manifest selects explicit checkout manifests."""
+    if manifest is not None:
+        if directory is not None:
+            raise ValueError('choose a console manifest or a components directory, not both')
+        manifest = Path(manifest).resolve()
+        data = json.loads(manifest.read_text(encoding='utf-8'))
+        if not isinstance(data, dict) or not isinstance(data.get('manifests'), list):
+            raise ValueError('console manifest must be an object with a manifests array')
+        if any(not isinstance(item, str) or not item.strip() for item in data['manifests']):
+            raise ValueError('each manifests entry must be a nonempty file path string')
+        manifests = [(manifest.parent / item).resolve() for item in data['manifests']]
+    else:
+        directory = Path(directory) if directory is not None else ROOT / 'components'
+        if not directory.exists():
+            return [], []
+        manifests = [child / MANIFEST for child in sorted(directory.iterdir())
+                     if child.is_dir() and (child / MANIFEST).is_file()]
+    return _discover_manifests(manifests)
+
+
+def _discover_manifests(manifests):
     entries, problems = [], []
-    if not directory.exists():
-        return entries, problems
-    for child in sorted(directory.iterdir()):
-        manifest = child / MANIFEST
-        if not child.is_dir() or not manifest.is_file():
-            continue
+    for manifest in manifests:
         try:
             data = json.loads(manifest.read_text(encoding='utf-8'))
             if not isinstance(data, dict):
@@ -55,11 +71,11 @@ def discover(directory):
                         raise ValueError('order must be an integer')
                     if type(item.get('height', 96)) is not int or item.get('height', 96) <= 0:
                         raise ValueError('height must be a positive integer in pixels')
-                    entries.append({**item, 'directory': child.resolve()})
+                    entries.append({**item, 'directory': manifest.parent.resolve()})
                 except ValueError as error:
-                    problems.append(f'{child.name} components[{index}]: {error}')
+                    problems.append(f'{manifest} components[{index}]: {error}')
         except (OSError, ValueError) as error:
-            problems.append(f'{child.name}: {error}')
+            problems.append(f'{manifest}: {error}')
     duplicates = {entry['id'] for entry in entries if sum(other['id'] == entry['id'] for other in entries) > 1}
     for name in sorted(duplicates):
         problems.append(f'duplicate component id {name}; none of its conflicting entries will load')
@@ -78,6 +94,7 @@ class DiscoveryShell(Shell):
             response.body = response.body.replace('No tools registered yet. Mount an App to add one.',
                                                   'No components found yet.')
             intro = ('<p>Clone a tool repository into <code>components/</code>, then restart this example. '
+                     'Or pass a console manifest listing component manifest paths from any location. '
                      'Tools supply <code>microweb-component.json</code>. No code is downloaded or installed by this launcher.</p>')
             if self.problems:
                 intro += '<h2>Components not loaded</h2><ul>'
@@ -86,9 +103,9 @@ class DiscoveryShell(Shell):
         return response
 
 
-def build_shell(components_dir, data_dir, overrides=None):
+def build_shell(components_dir=None, data_dir=ROOT / 'data', overrides=None, *, manifest=None):
     """Construct apps without creating data directories or starting services."""
-    entries, problems = discover(Path(components_dir).resolve())
+    entries, problems = discover(components_dir, manifest=manifest)
     data_dir = Path(data_dir).resolve()
     shell = DiscoveryShell(problems, title='Component console')
     for entry in entries:
@@ -127,20 +144,28 @@ def build_shell(components_dir, data_dir, overrides=None):
     return shell
 
 
-def main():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--components-dir', type=Path, default=ROOT / 'components')
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument('manifest', nargs='?', type=Path,
+                        help='optional JSON object with a manifests array of component manifest paths')
+    source.add_argument('--components-dir', type=Path,
+                        help='scan checkout directories here instead (default: components/)')
     parser.add_argument('--data-dir', type=Path, default=ROOT / 'data')
     parser.add_argument('--settings', type=Path, help='optional JSON component settings overrides')
     parser.add_argument('--port', type=int, default=8765)
-    args = parser.parse_args()
+    return parser, parser.parse_args(argv)
+
+
+def main():
+    parser, args = parse_args()
     try:
         config = json.loads(args.settings.read_text(encoding='utf-8')) if args.settings else {}
         if not isinstance(config, dict):
             raise ValueError('settings must be an object mapping component ids to settings objects')
         if any(not isinstance(value, dict) for value in config.values()):
             raise ValueError('each component settings entry must be an object')
-        shell = build_shell(args.components_dir, args.data_dir, config)
+        shell = build_shell(args.components_dir, args.data_dir, config, manifest=args.manifest)
     except (OSError, ValueError) as error:
         parser.error(str(error))
     for problem in shell.problems:
