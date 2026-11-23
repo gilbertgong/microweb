@@ -339,3 +339,15 @@ and data-directory behavior are unchanged. Added a bundled demo list and documen
 
 Validation: all 124 offline tests pass on Python 3.12 and Python 3.14/MSYS2. The bundled list
 constructs both demo panels and shared banner; no runtime/version changes or publishing.
+
+## 2026-11-22 — Embedded console settings
+
+Added optional functional settings to the console manifest consumed by examples/component_console.py.
+Merge each component's settings one level deep: tool defaults, console settings, explicit --settings
+file overrides. Retain host-owned settings_dir and factory-defined path handling. Shared validation
+rejects invalid embedded/explicit settings before imports. _usage/_notes remain informational. Metadata
+selection now shares one reader with construction so embedded settings and component paths use the same
+snapshot. Runtime, component contract, directory discovery and lifecycle remain unchanged.
+
+Validation: all 127 offline tests pass on Python 3.12 and MSYS2 Python 3.14, including embedded
+settings precedence, informational keys, protected settings_dir and pre-import validation.

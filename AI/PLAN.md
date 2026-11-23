@@ -108,3 +108,10 @@ Explicit manifest-list follow-up: all 124 tests pass on Python 3.12 and Python 3
 Six new discovery tests cover scattered paths, CLI selection, invalid/missing manifests, duplicate IDs,
 settings and lifecycle; bundled console-manifest.json loads both demo panels and the banner.
 No runtime/version change, release or consumer update.
+
+Embedded settings follow-up: the optional component console accepts settings in its console manifest.
+Merge per component/key: component defaults, embedded settings, explicit --settings file; settings_dir
+remains host-owned. Both settings sources are validated before factory imports. Runtime unchanged.
+
+Validation: all 127 offline tests pass on Python 3.12 and MSYS2 Python 3.14, including embedded
+settings precedence, informational keys, protected settings_dir and pre-import validation.

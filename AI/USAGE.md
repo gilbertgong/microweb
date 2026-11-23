@@ -35,7 +35,10 @@ not health. Presentation guidance and vocabulary are in docs/shell-conventions.m
 For optional discovery, follow docs/discovery-example.md. Users can place checkouts in components/ or pass
 a console manifest: python examples/component_console.py manifest.json. The object contains a manifests
 array of component manifest paths, relative to its own directory or absolute. This replaces directory scanning;
---components-dir is mutually exclusive. The launcher only reads local manifests. For smoke checks use temporary component/data roots and fabricated apps or a local
+--components-dir is mutually exclusive. Optional settings in the console manifest map component IDs to
+objects. Precedence per setting key: component defaults, embedded settings, --settings file. The host
+still owns settings_dir; tool paths retain factory-defined semantics. _usage/_notes remain informational.
+Validate settings before importing factories. The launcher only reads local manifests. For smoke checks use temporary component/data roots and fabricated apps or a local
 copy of the intended tool. Verify empty-state guidance, load diagnostics, mounted routes and shutdown; keep data
 outside checkouts. Do not install dependencies or fetch repositories unless the user separately requests it.
 Use examples/demo_components as the no-dependency fixture for multiple panels from one checkout and a shared

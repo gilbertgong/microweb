@@ -177,7 +177,8 @@ An additional [optional discovery example](docs/discovery-example.md) mounts too
 when they ship `microweb-component.json`. Run `python examples/component_console.py`; an empty console
 shows setup guidance. To use scattered checkouts instead, pass a JSON list manifest:
 `python examples/component_console.py manifest.json`. A ready-to-run list is
-`examples/console-manifest.json`. See the guide for its format and relative-path rules.
+`examples/console-manifest.json`. The manifest can include per-component `settings`; a separate
+`--settings` file overrides those values. See the guide for its format and relative-path rules.
 It never downloads or installs components. Data is kept separately under ignored `data/`.
 One checkout can provide several ordered panels and shared banners. Panels get navigation tabs; banners stay
 above every panel. The guide includes a synthetic two-panel/one-banner example to copy into `components/`.
