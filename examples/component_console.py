@@ -21,6 +21,20 @@ MANIFEST = 'microweb-component.json'
 
 def discover(directory=None, *, manifest=None):
     """Read metadata only; a console manifest selects explicit checkout manifests."""
+    manifests, _ = _select_manifests(directory, manifest)
+    return _discover_manifests(manifests)
+
+
+def _validate_settings(settings):
+    if not isinstance(settings, dict):
+        raise ValueError('settings must be an object mapping component ids to settings objects')
+    if any(not isinstance(value, dict) for value in settings.values()):
+        raise ValueError('each component settings entry must be an object')
+    return settings
+
+
+def _select_manifests(directory, manifest):
+    settings = {}
     if manifest is not None:
         if directory is not None:
             raise ValueError('choose a console manifest or a components directory, not both')
@@ -31,13 +45,14 @@ def discover(directory=None, *, manifest=None):
         if any(not isinstance(item, str) or not item.strip() for item in data['manifests']):
             raise ValueError('each manifests entry must be a nonempty file path string')
         manifests = [(manifest.parent / item).resolve() for item in data['manifests']]
+        settings = _validate_settings(data.get('settings', {}))
     else:
         directory = Path(directory) if directory is not None else ROOT / 'components'
         if not directory.exists():
-            return [], []
+            return [], settings
         manifests = [child / MANIFEST for child in sorted(directory.iterdir())
                      if child.is_dir() and (child / MANIFEST).is_file()]
-    return _discover_manifests(manifests)
+    return manifests, settings
 
 
 def _discover_manifests(manifests):
@@ -105,7 +120,9 @@ class DiscoveryShell(Shell):
 
 def build_shell(components_dir=None, data_dir=ROOT / 'data', overrides=None, *, manifest=None):
     """Construct apps without creating data directories or starting services."""
-    entries, problems = discover(components_dir, manifest=manifest)
+    manifests, config = _select_manifests(components_dir, manifest)
+    overrides = _validate_settings({} if overrides is None else overrides)
+    entries, problems = _discover_manifests(manifests)
     data_dir = Path(data_dir).resolve()
     shell = DiscoveryShell(problems, title='Component console')
     for entry in entries:
@@ -125,7 +142,8 @@ def build_shell(components_dir=None, data_dir=ROOT / 'data', overrides=None, *, 
             if not Path(module.__file__).resolve().is_relative_to(folder):
                 raise ValueError('factory resolved outside this checkout')
             home = data_dir / entry['id']
-            settings = {**entry.get('defaults', {}), **(overrides or {}).get(entry['id'], {}),
+            settings = {**entry.get('defaults', {}), **config.get(entry['id'], {}),
+                        **overrides.get(entry['id'], {}),
                         'settings_dir': home}
             component = getattr(module, function)(settings)
             if not isinstance(component, Component) or component.id != entry['id']:
@@ -152,7 +170,7 @@ def parse_args(argv=None):
     source.add_argument('--components-dir', type=Path,
                         help='scan checkout directories here instead (default: components/)')
     parser.add_argument('--data-dir', type=Path, default=ROOT / 'data')
-    parser.add_argument('--settings', type=Path, help='optional JSON component settings overrides')
+    parser.add_argument('--settings', type=Path, help='optional JSON overrides applied after console manifest settings')
     parser.add_argument('--port', type=int, default=8765)
     return parser, parser.parse_args(argv)
 
@@ -161,10 +179,6 @@ def main():
     parser, args = parse_args()
     try:
         config = json.loads(args.settings.read_text(encoding='utf-8')) if args.settings else {}
-        if not isinstance(config, dict):
-            raise ValueError('settings must be an object mapping component ids to settings objects')
-        if any(not isinstance(value, dict) for value in config.values()):
-            raise ValueError('each component settings entry must be an object')
         shell = build_shell(args.components_dir, args.data_dir, config, manifest=args.manifest)
     except (OSError, ValueError) as error:
         parser.error(str(error))

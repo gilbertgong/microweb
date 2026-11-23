@@ -150,6 +150,67 @@ def create_component(settings):
         self.assertEqual(error.exception.code, 2)
         run.assert_not_called()
 
+    def test_embedded_settings_override_defaults_without_rewriting_tool_paths(self):
+        tool = self.install()
+        manifest = self.console_manifest([tool / console.MANIFEST])
+        data = json.loads(manifest.read_text())
+        data.update({'settings': {'tool': {'message': 'embedded', 'session_file': 'nested/session.json',
+                                          'settings_dir': 'cannot-override-host'}},
+                     '_usage': 'informational', '_notes': 'also informational'})
+        manifest.write_text(json.dumps(data))
+        shell = console.build_shell(data_dir=self.data, manifest=manifest)
+        self.assertEqual(shell.problems, [])
+        values = json.loads(shell.handle('GET', '/tool/api/settings')[2])
+        self.assertEqual(values['message'], 'embedded')
+        self.assertEqual(values['session_file'], 'nested/session.json')
+        self.assertEqual(values['settings_dir'], str(self.data / 'tool'))
+        self.assertNotIn('_usage', values)
+        self.assertNotIn('_notes', values)
+        self.assertFalse(self.data.exists())
+
+    def test_cli_settings_override_embedded_values_per_component_and_preserve_other_keys(self):
+        tool = self.install()
+        manifest = self.console_manifest([tool / console.MANIFEST])
+        data = json.loads(manifest.read_text())
+        data['settings'] = {'tool': {'message': 'embedded', 'retained': 42}}
+        manifest.write_text(json.dumps(data))
+        settings = self.root / 'overrides.json'
+        settings.write_text(json.dumps({'tool': {'message': 'explicit'}}))
+        with patch('sys.argv', ['component_console.py', str(manifest), '--settings', str(settings),
+                                '--data-dir', str(self.data)]), \
+                patch.object(console.DiscoveryShell, 'run', autospec=True) as run:
+            console.main()
+        shell = run.call_args.args[0]
+        self.assertEqual(shell.problems, [])
+        values = json.loads(shell.handle('GET', '/tool/api/settings')[2])
+        self.assertEqual(values['session_file'], 'session.json')  # Component default.
+        self.assertEqual(values['retained'], 42)  # Embedded setting survives.
+        self.assertEqual(values['message'], 'explicit')  # CLI wins only for this key.
+        self.assertFalse(self.data.exists())
+
+    def test_invalid_embedded_or_override_settings_fail_before_factories_or_serving(self):
+        tool = self.install(source="raise AssertionError('invalid settings imported code')")
+        manifest = self.console_manifest([tool / console.MANIFEST])
+        data = json.loads(manifest.read_text())
+        for value in [None, [], 'bad', {'tool': None}, {'tool': []}]:
+            with self.subTest(value=value):
+                data['settings'] = value
+                manifest.write_text(json.dumps(data))
+                with self.assertRaises(ValueError):
+                    console.discover(manifest=manifest)
+                with patch('sys.argv', ['component_console.py', str(manifest)]), \
+                        patch.object(console.DiscoveryShell, 'run') as run, \
+                        contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+                    console.main()
+                self.assertEqual(error.exception.code, 2)
+                run.assert_not_called()
+                data['settings'] = {}
+                manifest.write_text(json.dumps(data))
+                if value is not None:
+                    with self.assertRaises(ValueError):
+                        console.build_shell(data_dir=self.data, overrides=value, manifest=manifest)
+        self.assertFalse(self.data.exists())
+
     def test_empty_and_missing_directories_show_help_without_writes(self):
         for path in [self.components, self.root / 'missing']:
             shell = console.build_shell(path, self.data)

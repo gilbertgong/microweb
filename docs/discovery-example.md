@@ -40,7 +40,10 @@ Instead of scanning a common directory, create a console manifest such as `manif
   "manifests": [
     "../librivox-download/microweb-component.json",
     "../voice-tools/microweb-component.json"
-  ]
+  ],
+  "settings": {
+    "downloads": {"session_file": "listening.json", "collect": false}
+  }
 }
 ```
 
@@ -163,7 +166,11 @@ a different adapter/hosting arrangement. Cloning a repository does not install i
 
 ## Local settings
 
-An optional JSON file maps component IDs to overrides. For example, `console.local.json`:
+A console manifest can include a functional `settings` object mapping component IDs to settings objects,
+so one file selects tools and configures them (see the example above). Omit it for component defaults.
+Keys such as `_usage` and `_notes` are informational and are not forwarded to factories.
+
+An optional separate JSON file maps component IDs to explicit overrides. For example, `console.local.json`:
 
 ```json
 {
@@ -179,10 +186,19 @@ python examples/component_console.py --settings console.local.json
 ```
 
 The root `console.local.json` is ignored. Other explicitly named settings files follow their normal Git rules.
-The launcher merges overrides over manifest defaults and supplies an absolute `settings_dir` of
+Settings merge per component, one level deep, in this order: component manifest `defaults`, console
+manifest `settings`, then explicit `--settings` overrides. An override replaces only matching setting keys;
+it does not discard that component's other settings. Nested values are replaced rather than recursively merged.
+Both settings sources must be objects mapping IDs to objects; invalid settings fail before factory imports.
+The separate file also works with directory discovery, where there is no console manifest.
+
+For example, `python examples/component_console.py manifest.json --settings console.local.json`
+uses the console manifest while applying machine-specific overrides last.
+
+The launcher supplies an absolute `settings_dir` of
 `data/<component id>/`. That launcher-owned field cannot be overridden per component; use `--data-dir`
 to change its root. Relative tool paths resolve against settings_dir according to the tool's factory,
-not against the cloned source directory or the overrides file's directory. Absolute tool paths remain usable.
+not against the cloned source directory, console manifest directory or overrides file's directory. Absolute tool paths remain usable.
 
 For the downloader defaults, the session is `data/downloads/session.json`; its normal default output root
 is `data/downloads/downloads/`. Startup collection is disabled by the manifest, although the real Download
