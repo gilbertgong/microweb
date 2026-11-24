@@ -188,17 +188,15 @@ above every panel. The guide includes a synthetic two-panel/one-banner example t
 Keep application code outside the vendored file so replacement is straightforward. No installation
 step is required. Retain the embedded license when redistributing the file.
 
-Applications that already have dependencies can instead install the same file as a module, so
-`import microweb` works without a vendored copy. Add one line to `requirements.txt`, pinned to a tag
-(or commit) that contains `pyproject.toml`; `latest` always names the newest installable commit:
+Applications can optionally install the same file as a module, so `import microweb` works without
+a vendored copy. Add the following to `requirements.txt`:
 
 ```text
 microweb @ git+https://github.com/gilbertgong/microweb@latest
 ```
 
-The installed `microweb.py` is byte-identical to the vendored one, and its version is the file's
-`__version__`. Vendored and installed copies are separate module instances: a host that installs
-microweb passes its instance to components that accept one (`framework=`), rather than loading two.
+A host that installs microweb passes its instance to components that accept one (`framework=`),
+rather than loading two.
 
 ```text
 python microweb.py --version
