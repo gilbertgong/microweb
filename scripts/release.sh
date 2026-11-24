@@ -130,9 +130,13 @@ def publish_release():
     origin = subprocess.run(["git", "remote", "get-url", "--push", "origin"], text=True, capture_output=True)
     url = origin.stdout.strip()
     target = url if (github_repository(url) or "").lower() == repository.lower() else f"https://github.com/{repository}.git"
-    report(f"Pushing main and {tag} together to {target} ...")
+    # `latest` is the one moving tag: pip installs it (microweb @ git+...@latest), so it follows main's head.
+    # It alone is force-pushed; the release tag is never replaced.
+    git("tag", "-f", "latest", "HEAD")
+    report(f"Pushing main, {tag} and the moving tag latest together to {target} ...")
     subprocess.run(["git", "push", "--atomic", target,
-                    "refs/heads/main:refs/heads/main", f"refs/tags/{tag}:refs/tags/{tag}"], check=True)
+                    "refs/heads/main:refs/heads/main", f"refs/tags/{tag}:refs/tags/{tag}",
+                    "+refs/tags/latest:refs/tags/latest"], check=True)
     existing = remote_release()
     if existing is None:
         report(f"Creating GitHub release {tag} with microweb.py ...")

@@ -37,7 +37,9 @@ class PublishTests(unittest.TestCase):
         self.publish()
         self.process.run.assert_any_call(
             ["git", "push", "--atomic", "git@github.com:example/microweb.git",
-             "refs/heads/main:refs/heads/main", "refs/tags/v1.0.0:refs/tags/v1.0.0"], check=True)
+             "refs/heads/main:refs/heads/main", "refs/tags/v1.0.0:refs/tags/v1.0.0",
+             "+refs/tags/latest:refs/tags/latest"], check=True)
+        self.ns["git"].assert_any_call("tag", "-f", "latest", "HEAD")
         self.gh.assert_any_call("release", "create", "v1.0.0", "microweb.py", "--repo", "example/microweb",
                                 "--verify-tag", "--title", "v1.0.0", "--generate-notes")
         self.assertNotIn("microweb.version", str(self.gh.call_args_list))

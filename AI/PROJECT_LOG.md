@@ -359,3 +359,10 @@ dependencies) while remaining a single vendorable file. Version stays in `__vers
 no version bump or release. Checked: a --no-build-isolation install into a scratch folder gave microweb-0.2.3
 with a microweb.py byte-identical to the repository file. pip cannot install the v0.2.3 tag (no pyproject
 there); consumers pin a commit until the next release. .gitignore gained /.worktrees/, /build/, *.egg-info/.
+
+## 2026-11-23 — release.sh moves the `latest` tag
+
+The README installs `microweb @ git+...@latest`, so `release.sh --push` now sets a lightweight `latest` tag
+to main's head and pushes it with main and the release tag in the same atomic push; only `latest` is forced.
+The mocked publish test asserts the new refspec. AI/USAGE.md records the rule that a release is made only
+when microweb.py itself changes. No release was made; all 127 tests pass.

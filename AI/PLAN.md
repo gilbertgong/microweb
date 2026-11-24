@@ -50,6 +50,8 @@ The optional Shell supplies navigation and embeds mounted apps; it does not mana
   dependencies; vendoring, --update and release.sh are unaffected. pip needs a ref containing pyproject.toml
   (v0.2.3 predates it), so pin a commit until a release includes it. Discovery stays an example; hosts that
   install microweb pass their instance to components (`framework=`), a convention, not a requirement.
+  The moving `latest` tag is what the README installs; `release.sh --push` sets it to main's head and
+  force-pushes only that tag, with main and the release tag. Release only when microweb.py itself changes.
 - Streaming file responses with HEAD and byte ranges; loopback-oriented threaded HTTP server.
 - Embedded partial metadata; separate release manifest on main with tagged download and checksum.
 - Explicit update checks and replacement of edited copies with exact-byte backup. Incoming bytes are

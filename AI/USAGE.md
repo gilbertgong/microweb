@@ -56,6 +56,11 @@ and newer installed versions are not downgraded. --check-update stays read-only.
 
 ## Prepare a release
 
+Release only when microweb.py itself changes (a new `__version__`). Changes to tests, docs, examples,
+packaging or scripts do not need a release: merge them to main. Never bump the version just to publish such
+changes. The `latest` tag (see Publish) moves only when a release is published, so it names the last release's
+head, not every later main commit.
+
 Only when requested: inspect main and configured Git identity, choose the actual OWNER/REPO,
 set a new `__version__` such as `v0.1.0` in microweb.py, then stage all intended release files.
 Requirements: Bash, Git, Python, an existing commit, branch main and configured Git author/committer.
@@ -91,8 +96,9 @@ Only when the user explicitly requests publishing/pushing: use `bash scripts/rel
 with `--repo OWNER/REPO`. Installing/configuring gh is separate setup; verify Git authentication and
 `gh auth login` before publishing. The script checks gh authentication before preparing a new release.
 It completes the same staged local release workflow (or validates an existing one), then requires clean
-main, pushes main and the selected tag atomically without force, and creates a GitHub release with
-generated notes. The only uploaded asset is microweb.py; microweb.version stays in Git only.
+main, pushes main, the selected tag and the moving `latest` tag atomically, and creates a GitHub release with
+generated notes. Only `latest` is force-pushed (it is set to main's head, the commit pip installs through
+`microweb @ git+https://github.com/OWNER/REPO@latest`); the release tag is never replaced. The only uploaded asset is microweb.py; microweb.version stays in Git only.
 It downloads that asset to verify its checksum. Origin's push URL is used only if it matches the selected
 GitHub repo; an override otherwise uses that repo's HTTPS URL. Do not silently publish to another repo.
 
