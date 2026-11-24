@@ -185,8 +185,18 @@ above every panel. The guide includes a synthetic two-panel/one-banner example t
 
 ## Copying and updates
 
-Keep application code outside the vendored file so replacement is straightforward. No pip package
-or installation step is required. Retain the embedded license when redistributing the file.
+Keep application code outside the vendored file so replacement is straightforward. No installation
+step is required. Retain the embedded license when redistributing the file.
+
+Applications can optionally install the same file as a module, so `import microweb` works without
+a vendored copy. Add the following to `requirements.txt`:
+
+```text
+microweb @ git+https://github.com/gilbertgong/microweb@latest
+```
+
+A host that installs microweb passes its instance to components that accept one (`framework=`),
+rather than loading two.
 
 ```text
 python microweb.py --version

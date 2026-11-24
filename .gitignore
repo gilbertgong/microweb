@@ -9,3 +9,6 @@ microweb.py.bak
 /data/
 /console.local.json
 /tests/.release-cache/
+/.worktrees/
+/build/
+*.egg-info/
