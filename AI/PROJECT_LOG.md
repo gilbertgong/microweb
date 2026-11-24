@@ -351,3 +351,11 @@ snapshot. Runtime, component contract, directory discovery and lifecycle remain 
 
 Validation: all 127 offline tests pass on Python 3.12 and MSYS2 Python 3.14, including embedded
 settings precedence, informational keys, protected settings_dir and pre-import validation.
+
+## 2026-11-23 — Installable as a module
+
+Added pyproject.toml so the unchanged root microweb.py can be pip-installed (for hosts that already have
+dependencies) while remaining a single vendorable file. Version stays in `__version__`; no runtime change, so
+no version bump or release. Checked: a --no-build-isolation install into a scratch folder gave microweb-0.2.3
+with a microweb.py byte-identical to the repository file. pip cannot install the v0.2.3 tag (no pyproject
+there); consumers pin a commit until the next release. .gitignore gained /.worktrees/, /build/, *.egg-info/.

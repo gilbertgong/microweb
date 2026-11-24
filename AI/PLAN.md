@@ -45,6 +45,11 @@ The optional Shell supplies navigation and embeds mounted apps; it does not mana
   or downloads. Explicit launchers and the single-file runtime remain independent of discovery.
   A manifest's components array supports multiple views per checkout; order sorts panels left to right and
   banners top to bottom across repos. examples/demo_components supplies two synthetic panels and one banner.
+- Optional pip installation of the same single file: pyproject.toml (setuptools, `py-modules = ["microweb"]`,
+  version read from `__version__`) installs the root microweb.py unchanged. No source or version change, no
+  dependencies; vendoring, --update and release.sh are unaffected. pip needs a ref containing pyproject.toml
+  (v0.2.3 predates it), so pin a commit until a release includes it. Discovery stays an example; hosts that
+  install microweb pass their instance to components (`framework=`), a convention, not a requirement.
 - Streaming file responses with HEAD and byte ranges; loopback-oriented threaded HTTP server.
 - Embedded partial metadata; separate release manifest on main with tagged download and checksum.
 - Explicit update checks and replacement of edited copies with exact-byte backup. Incoming bytes are

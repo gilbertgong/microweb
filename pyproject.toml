@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "microweb"
+dynamic = ["version"]
+description = "A tiny Flask-style web framework in one standard-library Python file, with an optional console shell"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+
+[tool.setuptools]
+# The distribution is the one vendorable file at the repository root, unchanged.
+py-modules = ["microweb"]
+
+[tool.setuptools.dynamic]
+version = { attr = "microweb.__version__" }
