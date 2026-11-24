@@ -58,8 +58,8 @@ and newer installed versions are not downgraded. --check-update stays read-only.
 
 Release only when microweb.py itself changes (a new `__version__`). Changes to tests, docs, examples,
 packaging or scripts do not need a release: merge them to main. Never bump the version just to publish such
-changes. The `latest` tag (see Publish) moves only when a release is published, so it names the last release's
-head, not every later main commit.
+changes. The `latest` tag should provide the latest `microweb.py` but doesn't necessarily correspond to the
+most recent commit.
 
 Only when requested: inspect main and configured Git identity, choose the actual OWNER/REPO,
 set a new `__version__` such as `v0.1.0` in microweb.py, then stage all intended release files.
