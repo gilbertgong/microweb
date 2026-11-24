@@ -190,10 +190,10 @@ step is required. Retain the embedded license when redistributing the file.
 
 Applications that already have dependencies can instead install the same file as a module, so
 `import microweb` works without a vendored copy. Add one line to `requirements.txt`, pinned to a tag
-(or commit) that contains `pyproject.toml`, such as `v0.2.3-install`:
+(or commit) that contains `pyproject.toml`; `latest` always names the newest installable commit:
 
 ```text
-microweb @ git+https://github.com/gilbertgong/microweb@v0.2.3-install
+microweb @ git+https://github.com/gilbertgong/microweb@latest
 ```
 
 The installed `microweb.py` is byte-identical to the vendored one, and its version is the file's
